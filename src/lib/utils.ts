@@ -13,9 +13,9 @@ export function cn(...inputs: ClassValue[]) {
 
 // ---------------------------------------------
 // 🔹 BACKEND BASE URL
-// Uses environment variable or defaults to localhost for development
+// Production URL hardcoded for Vercel deployment
 // ---------------------------------------------
-export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+export const BASE_URL = "https://prime-t1.onrender.com";
 console.log("BASE_URL:", BASE_URL);
 
 // ---------------------------------------------
