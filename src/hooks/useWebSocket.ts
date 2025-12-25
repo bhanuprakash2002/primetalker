@@ -36,6 +36,7 @@ export function useWebSocket({
     const [isConnected, setIsConnected] = useState(false);
     const [isAudioOn, setIsAudioOn] = useState(true);
     const [localLevel, setLocalLevel] = useState(0);
+    const [partnerLevel, setPartnerLevel] = useState(0);
 
     // Transcripts
     const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
@@ -55,6 +56,7 @@ export function useWebSocket({
     const audioQueueRef = useRef<string[]>([]);
     const isPlayingRef = useRef(false);
     const isAudioOnRef = useRef(true); // Track mute state for audio processor
+    const partnerLevelTimeoutRef = useRef<number | null>(null);
 
     // Sync isAudioOnRef with isAudioOn state
     useEffect(() => {
@@ -145,6 +147,10 @@ export function useWebSocket({
                     case "audio_playback":
                         audioQueueRef.current.push(data.audio);
                         processAudioQueue();
+                        // Partner is speaking (receiving their TTS audio)
+                        setPartnerLevel(50);
+                        if (partnerLevelTimeoutRef.current) clearTimeout(partnerLevelTimeoutRef.current);
+                        partnerLevelTimeoutRef.current = window.setTimeout(() => setPartnerLevel(0), 2000);
                         break;
                 }
             } catch (e) {
@@ -372,6 +378,7 @@ export function useWebSocket({
         isConnected,
         isAudioOn,
         localLevel,
+        partnerLevel,
         transcripts,
         interimText,
 

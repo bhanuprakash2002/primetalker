@@ -43,6 +43,7 @@ export default function Meeting() {
     isConnected,
     isAudioOn,
     localLevel,
+    partnerLevel,
     transcripts,
     interimText,
     connect,
@@ -174,7 +175,7 @@ export default function Meeting() {
   const participantsToRender = [
     { id: "you", name: myName, isLocal: true, muted: !isAudioOn, level: localLevel, language: myLanguage },
     ...(partnerJoined
-      ? [{ id: "partner", name: partnerName, isLocal: false, muted: false, level: 0, language: partnerLanguage }]
+      ? [{ id: "partner", name: partnerName, isLocal: false, muted: false, level: partnerLevel, language: partnerLanguage }]
       : []),
   ];
 
