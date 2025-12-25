@@ -61,14 +61,8 @@ const App = () => {
                 }
               />
 
-              <Route
-                path="/meeting/:roomId"
-                element={
-                  <ProtectedRoute>
-                    <Meeting />
-                  </ProtectedRoute>
-                }
-              />
+              {/* Meeting route is public - anyone with room ID can join */}
+              <Route path="/meeting/:roomId" element={<Meeting />} />
 
               {/* Public join route for shared links */}
               <Route path="/join/:roomId" element={<Join />} />
