@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { Video, Globe, Mic, Shield } from "lucide-react";
+import { Video, Globe, Mic, Shield, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 
@@ -87,6 +87,20 @@ const Landing = () => {
             >
               Start Meeting
             </Button>
+            <a
+              href="/PrimeTalker-User-Guide.html"
+              download="PrimeTalker-User-Guide.html"
+              className="inline-flex"
+            >
+              <Button
+                size="lg"
+                variant="outline"
+                className="text-lg px-8 gap-2"
+              >
+                <Download className="w-5 h-5" />
+                Download Guide
+              </Button>
+            </a>
           </div>
         </div>
       </section>
