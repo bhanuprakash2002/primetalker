@@ -20,7 +20,7 @@ const Landing = () => {
   const ProfileMenu = ({ user }: { user: any }) => {
     return (
       <img
-        src={user.user_metadata?.avatar_url || "/default-avatar.png"}
+        src={user.user_metadata?.avatar_url || "/default-avatar.svg"}
         className="w-10 h-10 rounded-full border cursor-pointer hover:scale-105 transition"
         onClick={() => setDrawerOpen(true)}
       />
@@ -197,50 +197,64 @@ const FeatureCard = ({ icon, title, description }: any) => (
 
 /* PREMIUM PROFILE DRAWER */
 const ProfileDrawer = ({ user, open, onClose }: any) => {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(
-    user.user_metadata?.full_name || user.email.split("@")[0]
+    user.user_metadata?.full_name || user.user_metadata?.username || user.email.split("@")[0]
   );
   const [avatarPreview, setAvatarPreview] = useState(
-    user.user_metadata?.avatar_url || "/default-avatar.png"
+    user.user_metadata?.avatar_url || "/default-avatar.svg"
   );
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const logout = async () => {
     await supabase.auth.signOut();
-    window.location.reload();
+    localStorage.removeItem("prime_user");
+    localStorage.removeItem("username");
+    window.location.href = "/landing";
   };
 
-  /* ---------------------------
-        Handle Avatar Upload
-  ---------------------------- */
+  /* Handle Avatar Upload */
   const handleAvatarChange = (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Image must be less than 2MB");
+      return;
+    }
+
+    setError(null);
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
   };
 
-  /* ---------------------------
-       Save Profile Changes
-  ---------------------------- */
+  /* Save Profile Changes */
   const handleSaveProfile = async () => {
     try {
       setSaving(true);
+      setError(null);
 
       let uploadedAvatarUrl = user.user_metadata?.avatar_url;
 
       // Upload avatar if selected
       if (avatarFile) {
-        const filePath = `avatars/${user.id}-${Date.now()}.png`;
+        const fileExt = avatarFile.name.split('.').pop();
+        const filePath = `${user.id}/${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from("avatars")
           .upload(filePath, avatarFile, { upsert: true });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          if (uploadError.message.includes("bucket") || uploadError.message.includes("not found")) {
+            throw new Error("Storage bucket not configured. Please create 'avatars' bucket in Supabase.");
+          }
+          throw uploadError;
+        }
 
         // Get public URL
         const { data: publicUrlData } = supabase.storage
@@ -260,19 +274,26 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
 
       if (error) throw error;
 
-      // UPDATE LOCAL STORAGE
+      // Update local storage
       localStorage.setItem("username", name);
 
-      // Refresh UI
-      window.location.reload();
-
-      // Refresh page to reflect changes
+      // Reset editing state and refresh
+      setEditing(false);
+      setAvatarFile(null);
       window.location.reload();
     } catch (err: any) {
-      alert("Update failed: " + err.message);
+      setError(err.message || "Failed to update profile");
     } finally {
       setSaving(false);
     }
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setAvatarFile(null);
+    setAvatarPreview(user.user_metadata?.avatar_url || "/default-avatar.svg");
+    setName(user.user_metadata?.full_name || user.user_metadata?.username || user.email.split("@")[0]);
+    setError(null);
   };
 
   return (
@@ -280,7 +301,7 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
       {/* Overlay */}
       <div
         className={`
-          fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 z-40
+          fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300 z-40
           ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
         `}
         onClick={onClose}
@@ -291,97 +312,181 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
         className={`
           fixed top-0 right-0 h-full w-80 bg-white dark:bg-slate-900 
           shadow-2xl z-50 rounded-l-2xl border-l border-gray-200 dark:border-slate-700
-          transform transition-transform duration-300
+          transform transition-transform duration-300 flex flex-col
           ${open ? "translate-x-0" : "translate-x-full"}
         `}
       >
         {/* Header */}
-        <div className="p-5 border-b flex items-center justify-between dark:border-slate-700">
-          <h2 className="text-xl font-semibold">My Account</h2>
-          <button onClick={onClose} className="text-2xl text-gray-500 hover:text-black">✕</button>
+        <div className="p-5 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            {editing ? "Edit Profile" : "My Account"}
+          </h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
+          >
+            <span className="text-gray-500 dark:text-gray-400">✕</span>
+          </button>
         </div>
 
         {/* Profile Section */}
-        <div className="p-6 flex flex-col items-center text-center">
+        <div className="p-6 flex flex-col items-center text-center border-b border-gray-100 dark:border-slate-800">
+          {/* Avatar with edit overlay */}
+          <div className="relative group">
+            <img
+              src={avatarPreview}
+              alt="Profile"
+              className="w-24 h-24 rounded-full border-4 border-white dark:border-slate-800 shadow-lg object-cover"
+              onError={(e: any) => { e.target.src = "/default-avatar.svg"; }}
+            />
+            {editing && (
+              <label className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-white text-sm font-medium">📷 Change</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handleAvatarChange}
+                />
+              </label>
+            )}
+          </div>
 
-          {/* Avatar */}
-          <img
-            src={avatarPreview}
-            className="w-24 h-24 rounded-full border shadow-md object-cover"
-          />
-
-          {editing && (
-            <label className="mt-3 text-sm cursor-pointer text-blue-500">
-              Change Avatar
-              <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
-            </label>
-          )}
-
-          {/* Name */}
+          {/* Name & Email */}
           {!editing ? (
-            <>
-              <h3 className="mt-4 text-xl font-semibold">
-                {user.user_metadata?.full_name || user.email.split("@")[0]}
+            <div className="mt-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {user.user_metadata?.full_name || user.user_metadata?.username || user.email.split("@")[0]}
               </h3>
-              <p className="text-gray-500">{user.email}</p>
-            </>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{user.email}</p>
+            </div>
           ) : (
-            <div className="mt-4 w-full px-4">
+            <div className="mt-4 w-full">
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 text-left">
+                Display Name
+              </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full p-2 rounded-md border bg-white dark:bg-slate-800"
-                placeholder="Your Name"
+                className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                placeholder="Enter your name"
               />
             </div>
           )}
         </div>
 
-        {/* Buttons */}
-        <div className="px-6 space-y-3 mt-3">
+        {/* Error Message */}
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          </div>
+        )}
 
-          {!editing && (
-            <>
+        {/* Menu Section */}
+        <div className="flex-1 p-4 overflow-y-auto">
+          {!editing ? (
+            <div className="space-y-2">
+              {/* Edit Profile */}
               <button
-                className="w-full p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-left"
+                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors text-left"
                 onClick={() => setEditing(true)}
               >
-                ✏️ Edit Profile
+                <span className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <span className="text-lg">✏️</span>
+                </span>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Edit Profile</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Change name and avatar</p>
+                </div>
               </button>
 
-              <button className="w-full p-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-left">
-                ⚙️ Settings (coming soon)
-              </button>
-
+              {/* My Rooms - Navigate to rooms page */}
               <button
-                onClick={logout}
-                className="w-full p-3 bg-red-500 hover:bg-red-600 text-white rounded-lg text-left"
+                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors text-left"
+                onClick={() => { onClose(); navigate("/rooms"); }}
               >
-                🚪 Sign Out
+                <span className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <span className="text-lg">🎥</span>
+                </span>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">My Rooms</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Create or join meetings</p>
+                </div>
               </button>
-            </>
-          )}
 
-          {/* Save / Cancel */}
-          {editing && (
-            <div className="space-y-2">
+              {/* Settings - Coming Soon */}
+              <button
+                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 rounded-xl opacity-60 cursor-not-allowed text-left"
+                disabled
+              >
+                <span className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                  <span className="text-lg">⚙️</span>
+                </span>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Settings</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Coming soon</p>
+                </div>
+              </button>
+
+              {/* Help/Guide */}
+              <a
+                href="/PrimeTalker-User-Guide.html"
+                target="_blank"
+                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors text-left block"
+              >
+                <span className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                  <span className="text-lg">📖</span>
+                </span>
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">User Guide</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Learn how to use PrimeTalker</p>
+                </div>
+              </a>
+            </div>
+          ) : (
+            /* Edit Mode Buttons */
+            <div className="space-y-3 mt-2">
               <button
                 onClick={handleSaveProfile}
-                className="w-full p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
                 disabled={saving}
+                className="w-full p-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
               >
-                {saving ? "Saving..." : "Save Changes"}
+                {saving ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <span>💾</span>
+                    Save Changes
+                  </>
+                )}
               </button>
 
               <button
-                onClick={() => setEditing(false)}
-                className="w-full p-3 bg-gray-300 hover:bg-gray-400 rounded-lg"
+                onClick={cancelEditing}
+                disabled={saving}
+                className="w-full p-4 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
               >
                 Cancel
               </button>
             </div>
           )}
         </div>
+
+        {/* Sign Out - Fixed at bottom */}
+        {!editing && (
+          <div className="p-4 border-t border-gray-100 dark:border-slate-800">
+            <button
+              onClick={logout}
+              className="w-full p-3 flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl font-medium transition-colors"
+            >
+              <span>🚪</span>
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
