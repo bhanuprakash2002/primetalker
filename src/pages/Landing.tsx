@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { Video, Globe, Mic, Shield, Download } from "lucide-react";
+import { Video, Globe, Mic, Shield, Download, User, Pencil, Camera, Settings, BookOpen, LogOut, X, Save, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 
@@ -301,7 +301,7 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
       {/* Overlay */}
       <div
         className={`
-          fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300 z-40
+          fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 z-40
           ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
         `}
         onClick={onClose}
@@ -310,38 +310,40 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
       {/* Drawer */}
       <div
         className={`
-          fixed top-0 right-0 h-full w-80 bg-white dark:bg-slate-900 
-          shadow-2xl z-50 rounded-l-2xl border-l border-gray-200 dark:border-slate-700
-          transform transition-transform duration-300 flex flex-col
+          fixed top-0 right-0 h-full w-[340px] bg-white dark:bg-slate-900 
+          shadow-2xl z-50 rounded-l-3xl border-l border-gray-100 dark:border-slate-800
+          transform transition-transform duration-300 ease-out flex flex-col
           ${open ? "translate-x-0" : "translate-x-full"}
         `}
       >
         {/* Header */}
-        <div className="p-5 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            {editing ? "Edit Profile" : "My Account"}
+        <div className="px-6 py-5 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
+            {editing ? "Edit Profile" : "Account"}
           </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 flex items-center justify-center transition-colors"
           >
-            <span className="text-gray-500 dark:text-gray-400">✕</span>
+            <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
-        {/* Profile Section */}
-        <div className="p-6 flex flex-col items-center text-center border-b border-gray-100 dark:border-slate-800">
+        {/* Profile Header */}
+        <div className="px-6 py-8 flex flex-col items-center text-center bg-gradient-to-b from-gray-50 to-white dark:from-slate-800/50 dark:to-slate-900">
           {/* Avatar with edit overlay */}
-          <div className="relative group">
-            <img
-              src={avatarPreview}
-              alt="Profile"
-              className="w-24 h-24 rounded-full border-4 border-white dark:border-slate-800 shadow-lg object-cover"
-              onError={(e: any) => { e.target.src = "/default-avatar.svg"; }}
-            />
+          <div className="relative">
+            <div className="w-20 h-20 rounded-full ring-4 ring-white dark:ring-slate-800 shadow-xl overflow-hidden">
+              <img
+                src={avatarPreview}
+                alt="Profile"
+                className="w-full h-full object-cover"
+                onError={(e: any) => { e.target.src = "/default-avatar.svg"; }}
+              />
+            </div>
             {editing && (
-              <label className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-white text-sm font-medium">📷 Change</span>
+              <label className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center cursor-pointer shadow-lg transition-colors">
+                <Camera className="w-4 h-4 text-white" />
                 <input
                   type="file"
                   className="hidden"
@@ -355,20 +357,20 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
           {/* Name & Email */}
           {!editing ? (
             <div className="mt-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                 {user.user_metadata?.full_name || user.user_metadata?.username || user.email.split("@")[0]}
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{user.email}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{user.email}</p>
             </div>
           ) : (
-            <div className="mt-4 w-full">
-              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 text-left">
+            <div className="mt-5 w-full">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 text-left uppercase tracking-wider">
                 Display Name
               </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full p-3 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                 placeholder="Enter your name"
               />
             </div>
@@ -377,88 +379,88 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
 
         {/* Error Message */}
         {error && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="mx-6 mt-4 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-xl">
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           </div>
         )}
 
         {/* Menu Section */}
-        <div className="flex-1 p-4 overflow-y-auto">
+        <div className="flex-1 px-4 py-4 overflow-y-auto">
           {!editing ? (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {/* Edit Profile */}
               <button
-                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors text-left"
+                className="w-full px-4 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors text-left group"
                 onClick={() => setEditing(true)}
               >
-                <span className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                  <span className="text-lg">✏️</span>
-                </span>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Edit Profile</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Change name and avatar</p>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
+                  <Pencil className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">Edit Profile</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Update name and photo</p>
                 </div>
               </button>
 
-              {/* My Rooms - Navigate to rooms page */}
+              {/* My Rooms */}
               <button
-                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors text-left"
+                className="w-full px-4 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors text-left group"
                 onClick={() => { onClose(); navigate("/rooms"); }}
               >
-                <span className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                  <span className="text-lg">🎥</span>
-                </span>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">My Rooms</p>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 transition-colors">
+                  <Video className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">My Rooms</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Create or join meetings</p>
                 </div>
               </button>
 
-              {/* Settings - Coming Soon */}
-              <button
-                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 rounded-xl opacity-60 cursor-not-allowed text-left"
-                disabled
-              >
-                <span className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                  <span className="text-lg">⚙️</span>
-                </span>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Settings</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Coming soon</p>
-                </div>
-              </button>
-
-              {/* Help/Guide */}
+              {/* User Guide */}
               <a
                 href="/PrimeTalker-User-Guide.html"
                 target="_blank"
-                className="w-full p-3 flex items-center gap-3 bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors text-left block"
+                className="w-full px-4 py-3.5 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors text-left group block"
               >
-                <span className="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
-                  <span className="text-lg">📖</span>
-                </span>
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">User Guide</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Learn how to use PrimeTalker</p>
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors">
+                  <BookOpen className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">User Guide</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Learn how to use the app</p>
                 </div>
               </a>
+
+              {/* Settings */}
+              <button
+                className="w-full px-4 py-3.5 flex items-center gap-4 rounded-xl text-left opacity-50 cursor-not-allowed"
+                disabled
+              >
+                <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
+                  <Settings className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Settings</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Coming soon</p>
+                </div>
+              </button>
             </div>
           ) : (
             /* Edit Mode Buttons */
-            <div className="space-y-3 mt-2">
+            <div className="space-y-3 pt-2">
               <button
                 onClick={handleSaveProfile}
                 disabled={saving}
-                className="w-full p-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl font-medium transition-all flex items-center justify-center gap-2"
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
               >
                 {saving ? (
                   <>
-                    <span className="animate-spin">⏳</span>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Saving...
                   </>
                 ) : (
                   <>
-                    <span>💾</span>
+                    <Save className="w-4 h-4" />
                     Save Changes
                   </>
                 )}
@@ -467,7 +469,7 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
               <button
                 onClick={cancelEditing}
                 disabled={saving}
-                className="w-full p-4 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium transition-colors"
+                className="w-full py-3.5 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium text-sm transition-colors"
               >
                 Cancel
               </button>
@@ -477,12 +479,12 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
 
         {/* Sign Out - Fixed at bottom */}
         {!editing && (
-          <div className="p-4 border-t border-gray-100 dark:border-slate-800">
+          <div className="px-4 py-4 border-t border-gray-100 dark:border-slate-800">
             <button
               onClick={logout}
-              className="w-full p-3 flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl font-medium transition-colors"
+              className="w-full py-3 flex items-center justify-center gap-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl font-medium text-sm transition-colors"
             >
-              <span>🚪</span>
+              <LogOut className="w-4 h-4" />
               Sign Out
             </button>
           </div>
