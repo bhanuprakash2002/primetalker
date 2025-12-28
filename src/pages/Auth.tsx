@@ -9,10 +9,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { countries, getStatesByCountry } from "@/lib/countryStateData";
 
 const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -21,10 +29,21 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [country, setCountry] = useState("");
+  const [stateProvince, setStateProvince] = useState("");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Get states for selected country
+  const availableStates = country ? getStatesByCountry(country) : [];
+
+  // Reset state when country changes
+  useEffect(() => {
+    setStateProvince("");
+  }, [country]);
 
   // =====================================================
   // 🔄 DETECT PASSWORD RECOVERY FROM EMAIL LINK
@@ -72,15 +91,76 @@ const Auth = () => {
       // SIGN UP
       // ------------------------------------------
       if (isSignUp) {
+        // Validate confirm password
+        if (password !== confirmPassword) {
+          toast({
+            title: "Passwords Don't Match",
+            description: "Please make sure both passwords are the same.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Validate username
+        if (!username.trim()) {
+          toast({
+            title: "Username Required",
+            description: "Please enter a username.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+
+        // Create user in Supabase
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${import.meta.env.VITE_SITE_URL}/`,
+            data: {
+              username: username,
+              country: country,
+              state: stateProvince,
+            },
           },
         });
 
         if (error) throw error;
+
+        // Save profile to Supabase PostgreSQL (if user was created)
+        if (data.user) {
+          try {
+            const countryName = countries.find(c => c.code === country)?.name || country;
+            const stateName = availableStates.find(s => s.code === stateProvince)?.name || stateProvince;
+
+            console.log("🔍 Saving profile for user:", data.user.id);
+            console.log("📦 Profile data:", { username: username.trim(), country: countryName, state: stateName });
+
+            // Insert directly into Supabase user_profiles table
+            const { data: insertData, error: profileError } = await supabase
+              .from("user_profiles")
+              .insert({
+                user_id: data.user.id,
+                username: username.trim(),
+                country: countryName,
+                state: stateName,
+              })
+              .select();
+
+            if (profileError) {
+              console.error("❌ Profile save error:", profileError);
+              console.error("Error details:", JSON.stringify(profileError, null, 2));
+            } else {
+              console.log("✅ Profile saved successfully:", insertData);
+            }
+          } catch (profileError) {
+            console.error("❌ Profile save error (exception):", profileError);
+          }
+        } else {
+          console.log("⚠️ No user returned from signUp");
+        }
 
         toast({
           title: "Account Created",
@@ -101,7 +181,7 @@ const Auth = () => {
 
       // Save session to localStorage for Index.tsx
       localStorage.setItem("prime_user", JSON.stringify(data.user));
-      localStorage.setItem("username", data.user.user_metadata?.full_name || data.user.email.split("@")[0]);
+      localStorage.setItem("username", data.user.user_metadata?.username || data.user.user_metadata?.full_name || data.user.email.split("@")[0]);
 
 
       toast({
@@ -314,6 +394,22 @@ const Auth = () => {
           ) : (
             /* Sign In / Sign Up Form */
             <form onSubmit={handleAuth} className="space-y-4">
+              {/* Username (Sign Up only) */}
+              {isSignUp && (
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="johndoe"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                    minLength={3}
+                  />
+                </div>
+              )}
+
               {/* Email */}
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -326,6 +422,44 @@ const Auth = () => {
                   required
                 />
               </div>
+
+              {/* Country (Sign Up only) */}
+              {isSignUp && (
+                <div className="space-y-2">
+                  <Label htmlFor="country">Country</Label>
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger id="country">
+                      <SelectValue placeholder="Select your country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countries.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* State (Sign Up only, shown when country has states) */}
+              {isSignUp && availableStates.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="state">State / Province</Label>
+                  <Select value={stateProvince} onValueChange={setStateProvince}>
+                    <SelectTrigger id="state">
+                      <SelectValue placeholder="Select your state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableStates.map((s) => (
+                        <SelectItem key={s.code} value={s.code}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Password */}
               <div className="space-y-2">
@@ -340,6 +474,22 @@ const Auth = () => {
                   minLength={6}
                 />
               </div>
+
+              {/* Confirm Password (Sign Up only) */}
+              {isSignUp && (
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    minLength={6}
+                  />
+                </div>
+              )}
 
               {/* Forgot Password Link */}
               {!isSignUp && (
