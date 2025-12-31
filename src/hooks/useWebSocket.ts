@@ -338,9 +338,26 @@ export function useWebSocket({
 
             // Handle incoming video tracks from partner
             pc.ontrack = (event) => {
-                console.log("📹 Received remote video track");
+                console.log("📹 Received remote track:", event.track.kind);
+                console.log("📹 Track enabled:", event.track.enabled);
+                console.log("📹 Track readyState:", event.track.readyState);
+                console.log("📹 Streams count:", event.streams?.length);
+
                 if (event.streams && event.streams[0]) {
+                    console.log("📹 Setting remote stream from event.streams[0]");
                     setRemoteStream(event.streams[0]);
+                } else {
+                    // Fallback: create a new MediaStream with the track
+                    console.log("📹 No streams in event, creating new MediaStream");
+                    const newStream = new MediaStream([event.track]);
+                    setRemoteStream((prev) => {
+                        if (prev) {
+                            // Add track to existing stream
+                            prev.addTrack(event.track);
+                            return prev;
+                        }
+                        return newStream;
+                    });
                 }
             };
 
@@ -352,6 +369,11 @@ export function useWebSocket({
                         candidate: event.candidate
                     }));
                 }
+            };
+
+            // Handle ICE connection state changes
+            pc.oniceconnectionstatechange = () => {
+                console.log("📹 ICE connection state:", pc.iceConnectionState);
             };
 
             // Handle connection state changes

@@ -76,6 +76,14 @@ export default function Meeting() {
     setStatus(wsStatus);
   }, [wsStatus]);
 
+  // Debug: Log remoteStream changes
+  useEffect(() => {
+    console.log("📹 Meeting: remoteStream changed:", remoteStream ? "HAS STREAM" : "NULL");
+    if (remoteStream) {
+      console.log("📹 Remote stream tracks:", remoteStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
+    }
+  }, [remoteStream]);
+
   // Fetch room info
   const fetchRoomInfo = useCallback(async () => {
     try {
