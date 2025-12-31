@@ -69,6 +69,7 @@ export function useWebSocket({
     const makingOfferRef = useRef(false);
     const ignoreOfferRef = useRef(false);
     const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+    const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
     // WebRTC ICE servers (STUN + free TURN for better connectivity)
     const rtcConfig: RTCConfiguration = {
@@ -203,6 +204,17 @@ export function useWebSocket({
             await pc.setLocalDescription(answer);
             ws.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
             console.log("📹 Video answer sent");
+
+            // Process any queued ICE candidates
+            while (pendingIceCandidatesRef.current.length > 0) {
+                const candidate = pendingIceCandidatesRef.current.shift()!;
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log("📹 Added queued ICE candidate");
+                } catch (e) {
+                    console.error("Error adding queued ICE candidate:", e);
+                }
+            }
         } catch (e) {
             console.error("Error handling offer:", e);
         }
@@ -216,6 +228,17 @@ export function useWebSocket({
         try {
             await pc.setRemoteDescription(new RTCSessionDescription(sdp));
             console.log("📹 Video connection established");
+
+            // Process any queued ICE candidates
+            while (pendingIceCandidatesRef.current.length > 0) {
+                const candidate = pendingIceCandidatesRef.current.shift()!;
+                try {
+                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    console.log("📹 Added queued ICE candidate");
+                } catch (e) {
+                    console.error("Error adding queued ICE candidate:", e);
+                }
+            }
         } catch (e) {
             console.error("Error handling answer:", e);
         }
@@ -290,10 +313,18 @@ export function useWebSocket({
 
                     case "ice_candidate":
                         if (data.candidate && peerConnectionRef.current) {
-                            try {
-                                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-                            } catch (e) {
-                                console.error("Error adding ICE candidate:", e);
+                            const pc = peerConnectionRef.current;
+                            // Queue ICE candidates if remote description not set yet
+                            if (!pc.remoteDescription) {
+                                console.log("📹 Queuing ICE candidate (no remote description yet)");
+                                pendingIceCandidatesRef.current.push(data.candidate);
+                            } else {
+                                try {
+                                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                                    console.log("📹 Added ICE candidate");
+                                } catch (e) {
+                                    console.error("Error adding ICE candidate:", e);
+                                }
                             }
                         }
                         break;
