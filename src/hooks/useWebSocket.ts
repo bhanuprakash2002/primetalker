@@ -70,11 +70,22 @@ export function useWebSocket({
     const ignoreOfferRef = useRef(false);
     const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
 
-    // WebRTC ICE servers (free Google STUN)
+    // WebRTC ICE servers (STUN + free TURN for better connectivity)
     const rtcConfig: RTCConfiguration = {
         iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
+            // Free TURN servers for NAT traversal
+            {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            },
+            {
+                urls: "turn:openrelay.metered.ca:443",
+                username: "openrelayproject",
+                credential: "openrelayproject"
+            }
         ]
     };
 
@@ -139,8 +150,10 @@ export function useWebSocket({
                     case "user_joined":
                         console.log("👤 Partner joined:", data.name);
                         onPartnerJoined?.(data.name, data.language);
-                        // Caller initiates video connection when partner joins
-                        if (userType === "caller" && peerConnectionRef.current) {
+                        // Both sides initiate video connection when partner joins
+                        // Perfect negotiation pattern handles any offer collisions
+                        if (peerConnectionRef.current) {
+                            console.log(`📹 Creating video offer (I am ${userType})`);
                             createVideoOffer();
                         }
                         break;
@@ -245,7 +258,28 @@ export function useWebSocket({
         if (!ws) return;
 
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            // Check for glare (both sides trying to create offer at same time)
+            const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
+
+            // Receiver is always "polite" - they will roll back their offer if collision happens
+            const isPolite = userType === "receiver";
+            ignoreOfferRef.current = !isPolite && offerCollision;
+
+            if (ignoreOfferRef.current) {
+                console.log("📹 Ignoring offer (glare detected, we are impolite)");
+                return;
+            }
+
+            // If we have a collision and we're polite, rollback
+            if (offerCollision && isPolite) {
+                await Promise.all([
+                    pc.setLocalDescription({ type: "rollback" }),
+                    pc.setRemoteDescription(new RTCSessionDescription(sdp))
+                ]);
+            } else {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            }
+
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             ws.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
@@ -253,7 +287,7 @@ export function useWebSocket({
         } catch (e) {
             console.error("Error handling offer:", e);
         }
-    }, []);
+    }, [userType]);
 
     // Handle incoming video answer
     const handleVideoAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
@@ -318,6 +352,11 @@ export function useWebSocket({
             // Handle connection state changes
             pc.onconnectionstatechange = () => {
                 console.log("📹 Connection state:", pc.connectionState);
+            };
+
+            // Handle negotiation needed - log only, we manually trigger offers when partner joins
+            pc.onnegotiationneeded = () => {
+                console.log("📹 Negotiation needed (will create offer when partner joins)");
             };
 
             // Process any pending video offer that was received before peer connection was ready
