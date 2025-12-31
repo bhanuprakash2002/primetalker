@@ -140,6 +140,87 @@ export function useWebSocket({
         }
     }, []);
 
+    // Create video offer
+    const createVideoOffer = useCallback(async () => {
+        const pc = peerConnectionRef.current;
+        const ws = wsRef.current;
+        if (!pc || !ws || ws.readyState !== WebSocket.OPEN) {
+            console.log("📹 Cannot create offer - PC or WS not ready");
+            return;
+        }
+
+        try {
+            makingOfferRef.current = true;
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ event: "video_offer", sdp: pc.localDescription }));
+            console.log("📹 Video offer sent");
+        } catch (e) {
+            console.error("Error creating offer:", e);
+        } finally {
+            makingOfferRef.current = false;
+        }
+    }, []);
+
+    // Handle incoming video offer
+    const handleVideoOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+        const pc = peerConnectionRef.current;
+        const ws = wsRef.current;
+
+        // If peer connection isn't ready yet, queue the offer
+        if (!pc) {
+            console.log("📹 Queuing video offer (peer connection not ready)");
+            pendingOfferRef.current = sdp;
+            return;
+        }
+
+        if (!ws) return;
+
+        try {
+            // Check for glare (both sides trying to create offer at same time)
+            const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
+
+            // Receiver is always "polite" - they will roll back their offer if collision happens
+            const isPolite = userType === "receiver";
+            ignoreOfferRef.current = !isPolite && offerCollision;
+
+            if (ignoreOfferRef.current) {
+                console.log("📹 Ignoring offer (glare detected, we are impolite)");
+                return;
+            }
+
+            // If we have a collision and we're polite, rollback
+            if (offerCollision && isPolite) {
+                await Promise.all([
+                    pc.setLocalDescription({ type: "rollback" }),
+                    pc.setRemoteDescription(new RTCSessionDescription(sdp))
+                ]);
+            } else {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            }
+
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
+            console.log("📹 Video answer sent");
+        } catch (e) {
+            console.error("Error handling offer:", e);
+        }
+    }, [userType]);
+
+    // Handle incoming video answer
+    const handleVideoAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+        const pc = peerConnectionRef.current;
+        if (!pc) return;
+
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            console.log("📹 Video connection established");
+        } catch (e) {
+            console.error("Error handling answer:", e);
+        }
+    }, []);
+
     // Handle incoming messages
     const handleMessage = useCallback(
         async (event: MessageEvent) => {
@@ -221,86 +302,10 @@ export function useWebSocket({
                 console.error("Error parsing message:", e);
             }
         },
-        [onPartnerJoined, onPartnerLeft, processAudioQueue, userType]
+        [onPartnerJoined, onPartnerLeft, processAudioQueue, userType, createVideoOffer, handleVideoOffer, handleVideoAnswer]
     );
 
-    // Create video offer (caller initiates)
-    const createVideoOffer = useCallback(async () => {
-        const pc = peerConnectionRef.current;
-        const ws = wsRef.current;
-        if (!pc || !ws || ws.readyState !== WebSocket.OPEN) return;
-
-        try {
-            makingOfferRef.current = true;
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            ws.send(JSON.stringify({ event: "video_offer", sdp: pc.localDescription }));
-            console.log("📹 Video offer sent");
-        } catch (e) {
-            console.error("Error creating offer:", e);
-        } finally {
-            makingOfferRef.current = false;
-        }
-    }, []);
-
-    // Handle incoming video offer
-    const handleVideoOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
-        const pc = peerConnectionRef.current;
-        const ws = wsRef.current;
-
-        // If peer connection isn't ready yet, queue the offer
-        if (!pc) {
-            console.log("📹 Queuing video offer (peer connection not ready)");
-            pendingOfferRef.current = sdp;
-            return;
-        }
-
-        if (!ws) return;
-
-        try {
-            // Check for glare (both sides trying to create offer at same time)
-            const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
-
-            // Receiver is always "polite" - they will roll back their offer if collision happens
-            const isPolite = userType === "receiver";
-            ignoreOfferRef.current = !isPolite && offerCollision;
-
-            if (ignoreOfferRef.current) {
-                console.log("📹 Ignoring offer (glare detected, we are impolite)");
-                return;
-            }
-
-            // If we have a collision and we're polite, rollback
-            if (offerCollision && isPolite) {
-                await Promise.all([
-                    pc.setLocalDescription({ type: "rollback" }),
-                    pc.setRemoteDescription(new RTCSessionDescription(sdp))
-                ]);
-            } else {
-                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-            }
-
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
-            console.log("📹 Video answer sent");
-        } catch (e) {
-            console.error("Error handling offer:", e);
-        }
-    }, [userType]);
-
-    // Handle incoming video answer
-    const handleVideoAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
-        const pc = peerConnectionRef.current;
-        if (!pc) return;
-
-        try {
-            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-            console.log("📹 Video connection established");
-        } catch (e) {
-            console.error("Error handling answer:", e);
-        }
-    }, []);
+    // (WebRTC video callbacks moved above handleMessage)
 
     // Start audio capture
     const startAudioCapture = useCallback(async () => {
