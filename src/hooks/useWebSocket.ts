@@ -1,5 +1,5 @@
 // src/hooks/useWebSocket.ts
-// WebSocket + WebRTC Audio hook for live translation
+// WebSocket + WebRTC Audio/Video hook for live translation
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { BASE_URL } from "@/lib/utils";
@@ -35,8 +35,13 @@ export function useWebSocket({
     const [status, setStatus] = useState<string>("Disconnected");
     const [isConnected, setIsConnected] = useState(false);
     const [isAudioOn, setIsAudioOn] = useState(true);
+    const [isVideoOn, setIsVideoOn] = useState(true);
     const [localLevel, setLocalLevel] = useState(0);
     const [partnerLevel, setPartnerLevel] = useState(0);
+
+    // Video streams
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
 
     // Transcripts
     const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
@@ -57,6 +62,21 @@ export function useWebSocket({
     const isPlayingRef = useRef(false);
     const isAudioOnRef = useRef(true); // Track mute state for audio processor
     const partnerLevelTimeoutRef = useRef<number | null>(null);
+
+    // WebRTC for peer-to-peer video
+    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+    const isVideoOnRef = useRef(true);
+    const makingOfferRef = useRef(false);
+    const ignoreOfferRef = useRef(false);
+    const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+
+    // WebRTC ICE servers (free Google STUN)
+    const rtcConfig: RTCConfiguration = {
+        iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+        ]
+    };
 
     // Sync isAudioOnRef with isAudioOn state
     useEffect(() => {
@@ -111,7 +131,7 @@ export function useWebSocket({
 
     // Handle incoming messages
     const handleMessage = useCallback(
-        (event: MessageEvent) => {
+        async (event: MessageEvent) => {
             try {
                 const data = JSON.parse(event.data);
 
@@ -119,11 +139,21 @@ export function useWebSocket({
                     case "user_joined":
                         console.log("👤 Partner joined:", data.name);
                         onPartnerJoined?.(data.name, data.language);
+                        // Caller initiates video connection when partner joins
+                        if (userType === "caller" && peerConnectionRef.current) {
+                            createVideoOffer();
+                        }
                         break;
 
                     case "user_left":
                         console.log("👤 Partner left");
                         onPartnerLeft?.();
+                        // Close peer connection when partner leaves
+                        if (peerConnectionRef.current) {
+                            peerConnectionRef.current.close();
+                            peerConnectionRef.current = null;
+                        }
+                        setRemoteStream(null);
                         break;
 
                     case "transcript_interim":
@@ -152,13 +182,91 @@ export function useWebSocket({
                         if (partnerLevelTimeoutRef.current) clearTimeout(partnerLevelTimeoutRef.current);
                         partnerLevelTimeoutRef.current = window.setTimeout(() => setPartnerLevel(0), 2000);
                         break;
+
+                    // WebRTC Video Signaling
+                    case "video_offer":
+                        console.log("📹 Received video offer");
+                        await handleVideoOffer(data.sdp);
+                        break;
+
+                    case "video_answer":
+                        console.log("📹 Received video answer");
+                        await handleVideoAnswer(data.sdp);
+                        break;
+
+                    case "ice_candidate":
+                        if (data.candidate && peerConnectionRef.current) {
+                            try {
+                                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+                            } catch (e) {
+                                console.error("Error adding ICE candidate:", e);
+                            }
+                        }
+                        break;
                 }
             } catch (e) {
                 console.error("Error parsing message:", e);
             }
         },
-        [onPartnerJoined, onPartnerLeft, processAudioQueue]
+        [onPartnerJoined, onPartnerLeft, processAudioQueue, userType]
     );
+
+    // Create video offer (caller initiates)
+    const createVideoOffer = useCallback(async () => {
+        const pc = peerConnectionRef.current;
+        const ws = wsRef.current;
+        if (!pc || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+        try {
+            makingOfferRef.current = true;
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ event: "video_offer", sdp: pc.localDescription }));
+            console.log("📹 Video offer sent");
+        } catch (e) {
+            console.error("Error creating offer:", e);
+        } finally {
+            makingOfferRef.current = false;
+        }
+    }, []);
+
+    // Handle incoming video offer
+    const handleVideoOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+        const pc = peerConnectionRef.current;
+        const ws = wsRef.current;
+
+        // If peer connection isn't ready yet, queue the offer
+        if (!pc) {
+            console.log("📹 Queuing video offer (peer connection not ready)");
+            pendingOfferRef.current = sdp;
+            return;
+        }
+
+        if (!ws) return;
+
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
+            console.log("📹 Video answer sent");
+        } catch (e) {
+            console.error("Error handling offer:", e);
+        }
+    }, []);
+
+    // Handle incoming video answer
+    const handleVideoAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+        const pc = peerConnectionRef.current;
+        if (!pc) return;
+
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+            console.log("📹 Video connection established");
+        } catch (e) {
+            console.error("Error handling answer:", e);
+        }
+    }, []);
 
     // Start audio capture
     const startAudioCapture = useCallback(async () => {
@@ -170,13 +278,76 @@ export function useWebSocket({
                     sampleRate: 48000,
                     channelCount: 1,
                 },
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: "user"
+                }
             });
 
             mediaStreamRef.current = stream;
+            setLocalStream(stream); // Set local stream for video display
+
+            // Setup WebRTC peer connection for video
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnectionRef.current = pc;
+
+            // Add video track to peer connection (for sending to partner)
+            stream.getTracks().forEach(track => {
+                pc.addTrack(track, stream);
+            });
+
+            // Handle incoming video tracks from partner
+            pc.ontrack = (event) => {
+                console.log("📹 Received remote video track");
+                if (event.streams && event.streams[0]) {
+                    setRemoteStream(event.streams[0]);
+                }
+            };
+
+            // Handle ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({
+                        event: "ice_candidate",
+                        candidate: event.candidate
+                    }));
+                }
+            };
+
+            // Handle connection state changes
+            pc.onconnectionstatechange = () => {
+                console.log("📹 Connection state:", pc.connectionState);
+            };
+
+            // Process any pending video offer that was received before peer connection was ready
+            if (pendingOfferRef.current) {
+                console.log("📹 Processing pending video offer");
+                const pendingOffer = pendingOfferRef.current;
+                pendingOfferRef.current = null;
+
+                // Process the pending offer
+                (async () => {
+                    try {
+                        await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        if (wsRef.current?.readyState === WebSocket.OPEN) {
+                            wsRef.current.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
+                            console.log("📹 Video answer sent (from pending offer)");
+                        }
+                    } catch (e) {
+                        console.error("Error processing pending offer:", e);
+                    }
+                })();
+            }
+
             const audioContext = new AudioContext({ sampleRate: 48000 });
             audioContextRef.current = audioContext;
 
-            const source = audioContext.createMediaStreamSource(stream);
+            // Create audio-only stream for processing (we only want audio for WebSocket)
+            const audioStream = new MediaStream(stream.getAudioTracks());
+            const source = audioContext.createMediaStreamSource(audioStream);
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
             analyserRef.current = analyser;
@@ -328,6 +499,14 @@ export function useWebSocket({
         }
         analyserRef.current = null;
 
+        // Close peer connection
+        if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+            peerConnectionRef.current = null;
+        }
+        setLocalStream(null);
+        setRemoteStream(null);
+
         // Close WebSocket
         if (wsRef.current) {
             if (wsRef.current.readyState === WebSocket.OPEN) {
@@ -365,6 +544,24 @@ export function useWebSocket({
         });
     }, []);
 
+    // Toggle video
+    const toggleVideo = useCallback(() => {
+        setIsVideoOn((prev) => {
+            const newValue = !prev;
+            isVideoOnRef.current = newValue;
+
+            // Enable/disable video tracks
+            if (mediaStreamRef.current) {
+                mediaStreamRef.current.getVideoTracks().forEach(track => {
+                    track.enabled = newValue;
+                });
+            }
+
+            console.log(`📹 Video toggled: ${newValue ? 'ON' : 'OFF'}`);
+            return newValue;
+        });
+    }, []);
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
@@ -377,15 +574,19 @@ export function useWebSocket({
         status,
         isConnected,
         isAudioOn,
+        isVideoOn,
         localLevel,
         partnerLevel,
         transcripts,
         interimText,
+        localStream,
+        remoteStream,
 
         // Actions
         connect,
         disconnect,
         toggleMute,
+        toggleVideo,
         setIsAudioOn,
     };
 }
