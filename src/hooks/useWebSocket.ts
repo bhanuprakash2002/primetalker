@@ -254,11 +254,16 @@ export function useWebSocket({
                     case "user_joined":
                         console.log("👤 Partner joined:", data.name);
                         onPartnerJoined?.(data.name, data.language);
-                        // Both sides initiate video connection when partner joins
-                        // Perfect negotiation pattern handles any offer collisions
-                        if (peerConnectionRef.current) {
-                            console.log(`📹 Creating video offer (I am ${userType})`);
-                            createVideoOffer();
+                        // Only CALLER creates video offer (receiver waits for offer)
+                        // This avoids glare (both sides creating offers at same time)
+                        if (userType === "caller" && peerConnectionRef.current) {
+                            console.log("📹 I am caller - creating video offer");
+                            // Small delay to ensure receiver's peer connection is ready
+                            setTimeout(() => {
+                                createVideoOffer();
+                            }, 500);
+                        } else {
+                            console.log("📹 I am receiver - waiting for offer from caller");
                         }
                         break;
 
@@ -601,6 +606,13 @@ export function useWebSocket({
             peerConnectionRef.current.close();
             peerConnectionRef.current = null;
         }
+
+        // Clear pending WebRTC state
+        pendingOfferRef.current = null;
+        pendingIceCandidatesRef.current = [];
+        makingOfferRef.current = false;
+        ignoreOfferRef.current = false;
+
         setLocalStream(null);
         setRemoteStream(null);
 
