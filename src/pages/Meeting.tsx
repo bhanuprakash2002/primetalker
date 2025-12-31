@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { joinRoom, BASE_URL } from "@/lib/utils";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useUsername } from "@/hooks/useUsername";
 
 import { Globe, Users } from "lucide-react";
 
@@ -20,10 +21,12 @@ const ROOMINFO_POLL = 2000;
 export default function Meeting() {
   const navigate = useNavigate();
   const { roomId } = useParams();
+  const { username } = useUsername();
 
   const role = (localStorage.getItem("role") || "caller") as "caller" | "receiver";
   const myLanguage = localStorage.getItem("myLanguage") || "en";
-  const myName = localStorage.getItem("username") || "You";
+  // Use sessionStorage first (set during room creation/join), then Supabase username, then fallback
+  const myName = sessionStorage.getItem("meetingUsername") || username || "You";
 
   // UI state
   const [status, setStatus] = useState("Click Start to Join");
@@ -225,8 +228,8 @@ export default function Meeting() {
       </header>
 
       {/* Main */}
-      <div className="flex flex-1 overflow-hidden">
-        <main className="flex-1 p-6">
+      <div className="flex flex-1 overflow-hidden relative">
+        <main className="flex-1 p-6 overflow-y-auto">
           <div className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
             {participantsToRender.length === 0 ? (
               <div className="text-slate-400">Waiting for participants...</div>
@@ -259,9 +262,24 @@ export default function Meeting() {
           )}
         </main>
 
+        {/* Backdrop for mobile */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Chat Sidebar - Fixed overlay on mobile, inline on desktop */}
         <aside
-          className={`w-96 border-l border-slate-800 bg-slate-900 transition-transform ${sidebarOpen ? "translate-x-0" : "translate-x-full"
-            } relative`}
+          className={`
+            fixed md:relative inset-y-0 right-0 z-50
+            w-full sm:w-80 md:w-96 
+            max-h-screen md:max-h-full
+            border-l border-slate-800 bg-slate-900 
+            transition-transform duration-300 ease-in-out
+            ${sidebarOpen ? "translate-x-0" : "translate-x-full"}
+          `}
         >
           <RightPanel
             transcripts={formattedTranscripts}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Video, Globe, Mic, Shield, Download, User, Pencil, Camera, Settings, BookOpen, LogOut, X, Save, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
+import Footer from "@/components/Footer";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ const Landing = () => {
 
       {/* NAVIGATION BAR */}
       <nav className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
 
           {/* LEFT - LOGO */}
           <div
@@ -42,7 +43,7 @@ const Landing = () => {
             <img
               src="/logo.png"
               alt="Logo"
-              className="w-40 h-auto object-contain select-none"
+              className="w-28 sm:w-40 h-auto object-contain select-none"
             />
           </div>
 
@@ -50,11 +51,11 @@ const Landing = () => {
           {user ? (
             <ProfileMenu user={user} />
           ) : (
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" onClick={() => navigate("/auth")}>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <Button variant="ghost" size="sm" onClick={() => navigate("/auth")} className="text-sm">
                 Sign In
               </Button>
-              <Button onClick={() => navigate("/auth")} className="shadow-primary">
+              <Button onClick={() => navigate("/auth")} size="sm" className="shadow-primary text-sm">
                 Get Started
               </Button>
             </div>
@@ -64,9 +65,9 @@ const Landing = () => {
       </nav>
 
       {/* HERO SECTION */}
-      <section className="container mx-auto px-4 py-20 text-center animate-fade-in">
-        <div className="max-w-4xl mx-auto space-y-8">
-          <h2 className="text-5xl md:text-6xl font-bold text-foreground leading-tight">
+      <section className="container mx-auto px-4 py-12 sm:py-20 text-center animate-fade-in">
+        <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
+          <h2 className="text-3xl sm:text-5xl md:text-6xl font-bold text-foreground leading-tight">
             Break Language Barriers in
             <span className="text-transparent bg-clip-text bg-gradient-primary">
               {" "}Real-Time
@@ -154,23 +155,7 @@ const Landing = () => {
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t border-border bg-card/50 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-
-            <div
-              onClick={() => navigate("/landing")}
-              className="flex items-center gap-2 cursor-pointer"
-            >
-              <span className="font-semibold text-foreground">PrimeTalker</span>
-            </div>
-
-            <p className="text-muted-foreground text-sm">
-              © 2025 PrimeTalker. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
 
       {/* PROFILE DRAWER */}
       {user && (
@@ -274,8 +259,7 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
 
       if (error) throw error;
 
-      // Update local storage
-      localStorage.setItem("username", name);
+      // Username is now fetched from Supabase session via useUsername hook
 
       // Reset editing state and refresh
       setEditing(false);

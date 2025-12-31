@@ -19,6 +19,8 @@ export type Database = {
           id: number
           user_id: string
           username: string
+          first_name: string | null
+          last_name: string | null
           country: string | null
           state: string | null
           created_at: string
@@ -27,6 +29,8 @@ export type Database = {
           id?: number
           user_id: string
           username: string
+          first_name?: string | null
+          last_name?: string | null
           country?: string | null
           state?: string | null
           created_at?: string
@@ -35,6 +39,8 @@ export type Database = {
           id?: number
           user_id?: string
           username?: string
+          first_name?: string | null
+          last_name?: string | null
           country?: string | null
           state?: string | null
           created_at?: string

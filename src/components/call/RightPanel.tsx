@@ -25,7 +25,7 @@ export default function RightPanel({
   }, [transcripts]);
 
   return (
-    <div className="h-full flex flex-col bg-slate-900 text-white">
+    <div className="h-full max-h-screen flex flex-col bg-slate-900 text-white overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
         <div className="text-lg font-semibold">Live Translation</div>
@@ -35,11 +35,10 @@ export default function RightPanel({
         </div>
       </div>
 
-      {/* Messages container - fixed height with scroll */}
+      {/* Messages container - flex-1 with overflow scroll */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
-        style={{ maxHeight: "calc(100vh - 180px)" }}
+        className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0"
       >
         {transcripts.length === 0 && (
           <div className="text-slate-400 text-center py-8">
@@ -53,8 +52,8 @@ export default function RightPanel({
             <div
               key={i}
               className={`p-3 rounded-2xl max-w-[85%] ${isYou
-                  ? "ml-auto bg-gradient-to-r from-sky-600 to-indigo-600 text-white"
-                  : "mr-auto bg-slate-800/80 text-white"
+                ? "ml-auto bg-gradient-to-r from-sky-600 to-indigo-600 text-white"
+                : "mr-auto bg-slate-800/80 text-white"
                 }`}
             >
               <div className="flex items-center gap-2 mb-1">

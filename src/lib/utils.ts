@@ -65,13 +65,15 @@ export async function apiPost(endpoint: string, data: any) {
 
 // Create a new room
 export function createRoom(language: string) {
-  const creatorName = localStorage.getItem("username") || "User";
+  // Get username from sessionStorage (set when creating room) or fallback
+  const creatorName = sessionStorage.getItem("meetingUsername") || "User";
   return apiPost("/create-room", { creatorLanguage: language, creatorName });
 }
 
 // Join an existing room
 export function joinRoom(roomId: string, language: string) {
-  const participantName = localStorage.getItem("username") || "User";
+  // Get username from sessionStorage (set when joining room) or fallback
+  const participantName = sessionStorage.getItem("meetingUsername") || "User";
   return apiPost("/join-room", { roomId, participantLanguage: language, participantName });
 }
 

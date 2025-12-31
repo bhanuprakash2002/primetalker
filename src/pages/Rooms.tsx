@@ -13,11 +13,14 @@ import { useNavigate } from "react-router-dom";
 import { Globe, Video, LogOut, Copy, Check, Share2, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUsername } from "@/hooks/useUsername";
 import { createRoom, joinRoom } from "@/lib/utils";
+import Footer from "@/components/Footer";
 
 const Rooms = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { username } = useUsername();
 
   const [roomId, setRoomId] = useState("");
   const [language, setLanguage] = useState("en");
@@ -45,12 +48,15 @@ const Rooms = () => {
     setIsCreating(true);
 
     try {
+      // Store username BEFORE calling createRoom so API uses it
+      sessionStorage.setItem("meetingUsername", username.trim() || "User");
+
       const result = await createRoom(language);
 
       const newRoomId = result.roomId;
       if (!newRoomId) throw new Error("Invalid response from server.");
 
-      // Save meeting info locally
+      // Save meeting info locally (only language and role)
       localStorage.setItem("myLanguage", language);
       localStorage.setItem("role", "caller");
 
@@ -138,12 +144,16 @@ const Rooms = () => {
     setIsJoining(true);
 
     try {
+      // Store username BEFORE calling joinRoom so API uses it
+      sessionStorage.setItem("meetingUsername", username.trim() || "User");
+
       const result = await joinRoom(roomId.trim(), language);
 
       if (!result.success) {
         throw new Error(result.message || "Failed to join room");
       }
 
+      // Save meeting info locally (only language and role)
       localStorage.setItem("myLanguage", language);
       localStorage.setItem("role", "receiver");
 
@@ -174,28 +184,30 @@ const Rooms = () => {
     <div className="min-h-screen bg-gradient-hero flex flex-col">
       {/* Header */}
       <header className="border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/landing")}>
-            <img src="/logo.png" className="w-40 h-auto" />
+            <img src="/logo.png" className="w-28 sm:w-40 h-auto" alt="Logo" />
           </div>
-          <Button variant="ghost" onClick={handleSignOut}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
+          <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-sm">
+            <LogOut className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Sign Out</span>
           </Button>
         </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 container mx-auto px-4 py-12 flex items-center justify-center">
-        <div className="max-w-4xl w-full grid md:grid-cols-2 gap-6">
+      <main className="flex-1 container mx-auto px-4 py-6 sm:py-12 flex items-center justify-center">
+        <div className={`w-full grid ${createdRoomId ? 'max-w-md grid-cols-1' : 'max-w-4xl grid-cols-1 md:grid-cols-2'} gap-4 sm:gap-6`}>
 
-          {/* Create Room */}
+          {/* Create Room / Enter Room */}
           <Card className="shadow-primary border-2 hover:border-primary/50 transition-all">
             <CardHeader className="text-center space-y-4">
               <div className="w-16 h-16 mx-auto rounded-xl bg-gradient-primary flex items-center justify-center">
                 <Video className="w-10 h-10 text-primary-foreground" />
               </div>
-              <CardTitle className="text-2xl">Create Room</CardTitle>
+              <CardTitle className="text-2xl">
+                {createdRoomId ? "Enter Room" : "Create Room"}
+              </CardTitle>
               <CardDescription>
                 {createdRoomId
                   ? "Share this link with others to join your meeting"
@@ -307,76 +319,81 @@ const Rooms = () => {
             </CardContent>
           </Card>
 
-          {/* Join Room */}
-          <Card className="shadow-primary border-2 hover:border-primary/50 transition-all">
-            <CardHeader className="text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-xl bg-gradient-primary flex items-center justify-center">
-                <Globe className="w-10 h-10 text-primary-foreground" />
-              </div>
-              <CardTitle className="text-2xl">Join Room</CardTitle>
-              <CardDescription>
-                Enter a room ID & your language to join an existing meeting
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent>
-              <form onSubmit={handleJoinRoom} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="roomId">Room ID</Label>
-                  <Input
-                    id="roomId"
-                    type="text"
-                    placeholder="ROOM1234"
-                    value={roomId}
-                    onChange={(e) => setRoomId(e.target.value)}
-                    className="text-center text-lg font-mono"
-                    required
-                  />
+          {/* Join Room - Only show when no room has been created */}
+          {!createdRoomId && (
+            <Card className="shadow-primary border-2 hover:border-primary/50 transition-all">
+              <CardHeader className="text-center space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-xl bg-gradient-primary flex items-center justify-center">
+                  <Globe className="w-10 h-10 text-primary-foreground" />
                 </div>
+                <CardTitle className="text-2xl">Join Room</CardTitle>
+                <CardDescription>
+                  Enter a room ID & your language to join an existing meeting
+                </CardDescription>
+              </CardHeader>
 
-                <div className="space-y-2">
-                  <Label>Your Language</Label>
-                  <select
-                    className="w-full bg-background border p-2 rounded-md"
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
+              <CardContent>
+                <form onSubmit={handleJoinRoom} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="roomId">Room ID</Label>
+                    <Input
+                      id="roomId"
+                      type="text"
+                      placeholder="ROOM1234"
+                      value={roomId}
+                      onChange={(e) => setRoomId(e.target.value)}
+                      className="text-center text-lg font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Your Language</Label>
+                    <select
+                      className="w-full bg-background border p-2 rounded-md"
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                    >
+                      <option value="en">English</option>
+                      <option value="hi">Hindi</option>
+                      <option value="te">Telugu</option>
+                      <option value="ta">Tamil</option>
+                      <option value="bn">Bengali</option>
+                      <option value="mr">Marathi</option>
+                      <option value="gu">Gujarati</option>
+                      <option value="kn">Kannada</option>
+                      <option value="ml">Malayalam</option>
+                      <option value="pa">Punjabi</option>
+                      <option value="es">Spanish</option>
+                      <option value="fr">French</option>
+                      <option value="de">German</option>
+                      <option value="pt">Portuguese</option>
+                      <option value="ja">Japanese</option>
+                      <option value="zh">Chinese</option>
+                      <option value="ko">Korean</option>
+                      <option value="ar">Arabic</option>
+                      <option value="ru">Russian</option>
+                    </select>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    className="w-full"
+                    size="lg"
+                    disabled={isJoining}
                   >
-                    <option value="en">English</option>
-                    <option value="hi">Hindi</option>
-                    <option value="te">Telugu</option>
-                    <option value="ta">Tamil</option>
-                    <option value="bn">Bengali</option>
-                    <option value="mr">Marathi</option>
-                    <option value="gu">Gujarati</option>
-                    <option value="kn">Kannada</option>
-                    <option value="ml">Malayalam</option>
-                    <option value="pa">Punjabi</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                    <option value="de">German</option>
-                    <option value="pt">Portuguese</option>
-                    <option value="ja">Japanese</option>
-                    <option value="zh">Chinese</option>
-                    <option value="ko">Korean</option>
-                    <option value="ar">Arabic</option>
-                    <option value="ru">Russian</option>
-                  </select>
-                </div>
-
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  className="w-full"
-                  size="lg"
-                  disabled={isJoining}
-                >
-                  {isJoining ? "Joining..." : "Join Room"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                    {isJoining ? "Joining..." : "Join Room"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
+
+      {/* Footer */}
+      <Footer />
     </div>
   );
 };
