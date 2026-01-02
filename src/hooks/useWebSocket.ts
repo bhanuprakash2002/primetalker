@@ -72,37 +72,44 @@ export function useWebSocket({
     const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
     // WebRTC ICE servers (STUN + TURN for better connectivity)
-    // Using multiple STUN servers for reliability
+    // Multiple TURN server options for reliability across different networks
     const rtcConfig: RTCConfiguration = {
         iceServers: [
+            // Google STUN servers
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
             { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun3.l.google.com:19302" },
-            { urls: "stun:stun4.l.google.com:19302" },
-            // Free TURN servers for NAT traversal (Metered)
+            // Free TURN servers - multiple fallbacks
+            // freestun.net (confirmed working May 2024)
             {
-                urls: "turn:a.relay.metered.ca:80",
-                username: "e8dd65def7205b163ab5bce8",
-                credential: "uMW/7yGYItXwxPpo"
+                urls: "turn:freestun.net:3478",
+                username: "free",
+                credential: "free"
             },
             {
-                urls: "turn:a.relay.metered.ca:80?transport=tcp",
-                username: "e8dd65def7205b163ab5bce8",
-                credential: "uMW/7yGYItXwxPpo"
+                urls: "turn:freestun.net:5349",
+                username: "free",
+                credential: "free"
+            },
+            // OpenRelay (metered.ca)
+            {
+                urls: "turn:openrelay.metered.ca:80",
+                username: "openrelayproject",
+                credential: "openrelayproject"
             },
             {
-                urls: "turn:a.relay.metered.ca:443",
-                username: "e8dd65def7205b163ab5bce8",
-                credential: "uMW/7yGYItXwxPpo"
+                urls: "turn:openrelay.metered.ca:443",
+                username: "openrelayproject",
+                credential: "openrelayproject"
             },
             {
-                urls: "turn:a.relay.metered.ca:443?transport=tcp",
-                username: "e8dd65def7205b163ab5bce8",
-                credential: "uMW/7yGYItXwxPpo"
+                urls: "turn:openrelay.metered.ca:443?transport=tcp",
+                username: "openrelayproject",
+                credential: "openrelayproject"
             }
         ],
-        iceCandidatePoolSize: 10
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: "all" // Try both STUN and TURN
     };
 
     // Sync isAudioOnRef with isAudioOn state
@@ -433,10 +440,31 @@ export function useWebSocket({
             pc.oniceconnectionstatechange = () => {
                 console.log("📹 ICE connection state:", pc.iceConnectionState);
 
-                // Handle ICE failure - may need to restart
+                // Handle ICE disconnection - attempt to restart
+                if (pc.iceConnectionState === "disconnected") {
+                    console.log("📹 ICE disconnected, will attempt restart if it doesn't reconnect...");
+                    // Give it a moment to reconnect naturally, then restart if still disconnected
+                    setTimeout(() => {
+                        if (peerConnectionRef.current?.iceConnectionState === "disconnected" ||
+                            peerConnectionRef.current?.iceConnectionState === "failed") {
+                            console.log("📹 ICE still disconnected, attempting restart...");
+                            peerConnectionRef.current?.restartIce();
+                            // Trigger renegotiation - caller should create new offer
+                            if (userType === "caller" && wsRef.current?.readyState === WebSocket.OPEN) {
+                                createVideoOffer();
+                            }
+                        }
+                    }, 2000);
+                }
+
+                // Handle ICE failure - immediately restart
                 if (pc.iceConnectionState === "failed") {
-                    console.log("📹 ICE connection failed, attempting restart...");
+                    console.log("📹 ICE connection failed, attempting immediate restart...");
                     pc.restartIce();
+                    // Trigger renegotiation
+                    if (userType === "caller" && wsRef.current?.readyState === WebSocket.OPEN) {
+                        setTimeout(() => createVideoOffer(), 500);
+                    }
                 }
 
                 if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
