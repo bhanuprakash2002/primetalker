@@ -100,16 +100,17 @@ export default function ParticipantTile({
     >
       {/* Video or Avatar content */}
       <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px] relative">
-        {showVideo ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={isLocal}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          /* Avatar fallback when video is off */
+        {/* Always render video element to ensure ref is available */}
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={isLocal}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        />
+
+        {/* Avatar fallback - shown when video is off */}
+        {!showVideo && (
           <>
             <div
               className={`
