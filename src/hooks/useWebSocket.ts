@@ -108,9 +108,9 @@ export function useWebSocket({
             }
         ],
         iceCandidatePoolSize: 10,
-        // Force relay to ensure TURN servers are used (helps with symmetric NAT)
-        // Change to "all" if you want to try STUN first
-        iceTransportPolicy: "relay"
+        // Use "all" to allow both STUN and TURN candidates
+        // STUN works for direct connections, TURN needed for symmetric NAT
+        iceTransportPolicy: "all"
     };
 
     // Sync isAudioOnRef with isAudioOn state
