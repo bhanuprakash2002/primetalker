@@ -45,17 +45,13 @@ export default function Meeting() {
     status: wsStatus,
     isConnected,
     isAudioOn,
-    isVideoOn,
     localLevel,
     partnerLevel,
     transcripts,
     interimText,
-    localStream,
-    remoteStream,
     connect,
     disconnect,
     toggleMute,
-    toggleVideo,
   } = useWebSocket({
     roomId: roomId || "",
     userType: role,
@@ -75,14 +71,6 @@ export default function Meeting() {
   useEffect(() => {
     setStatus(wsStatus);
   }, [wsStatus]);
-
-  // Debug: Log remoteStream changes
-  useEffect(() => {
-    console.log("📹 Meeting: remoteStream changed:", remoteStream ? "HAS STREAM" : "NULL");
-    if (remoteStream) {
-      console.log("📹 Remote stream tracks:", remoteStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
-    }
-  }, [remoteStream]);
 
   // Fetch room info
   const fetchRoomInfo = useCallback(async () => {
@@ -188,9 +176,9 @@ export default function Meeting() {
 
   // Participants
   const participantsToRender = [
-    { id: "you", name: myName, isLocal: true, muted: !isAudioOn, level: localLevel, language: myLanguage, videoStream: localStream, isVideoOn },
+    { id: "you", name: myName, isLocal: true, muted: !isAudioOn, level: localLevel, language: myLanguage },
     ...(partnerJoined
-      ? [{ id: "partner", name: partnerName, isLocal: false, muted: false, level: partnerLevel, language: partnerLanguage, videoStream: remoteStream, isVideoOn: true }]
+      ? [{ id: "partner", name: partnerName, isLocal: false, muted: false, level: partnerLevel, language: partnerLanguage }]
       : []),
   ];
 
@@ -254,8 +242,6 @@ export default function Meeting() {
                   muted={p.muted}
                   level={p.level}
                   language={p.language || undefined}
-                  videoStream={p.videoStream}
-                  isVideoOn={p.isVideoOn}
                 />
               ))
             )}
@@ -309,11 +295,9 @@ export default function Meeting() {
         <div className="pointer-events-auto bg-slate-800/80 backdrop-blur rounded-3xl px-6 py-3 flex items-center gap-6 shadow-2xl border border-slate-700">
           <ControlBar
             isAudioOn={isAudioOn}
-            isVideoOn={isVideoOn}
             isSpeakerOn={isSpeakerOn}
             isChatOpen={sidebarOpen}
             onToggleMute={toggleMute}
-            onToggleVideo={toggleVideo}
             onToggleSpeaker={toggleSpeaker}
             onToggleChat={() => setSidebarOpen((s) => !s)}
             onEndCall={endCall}

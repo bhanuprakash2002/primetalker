@@ -1,5 +1,5 @@
 // src/components/call/ParticipantTile.tsx
-import React, { useRef, useEffect } from "react";
+import React from "react";
 import MicLevel from "./MicLevel";
 import { Mic, MicOff, Globe, User } from "lucide-react";
 
@@ -29,18 +29,13 @@ export default function ParticipantTile({
   muted = false,
   level = 0,
   language,
-  videoStream,
-  isVideoOn = true,
 }: {
   name: string;
   isLocal?: boolean;
   muted?: boolean;
   level?: number;
   language?: string;
-  videoStream?: MediaStream | null;
-  isVideoOn?: boolean;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const langCode = language?.split("-")[0] || "en";
   const langDisplay = languageNames[langCode] || language || "Unknown";
   const langFlag = languageFlags[langCode] || "🌐";
@@ -51,44 +46,6 @@ export default function ParticipantTile({
   // Determine if speaking based on audio level
   const isSpeaking = !muted && level > 15;
 
-  // Debug: log when videoStream changes
-  useEffect(() => {
-    console.log(`🎬 ParticipantTile [${name}]: videoStream=${videoStream ? 'HAS_STREAM' : 'NULL'}, isVideoOn=${isVideoOn}, isLocal=${isLocal}`);
-    if (videoStream) {
-      console.log(`🎬 ParticipantTile [${name}]: tracks=`, videoStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
-    }
-  }, [videoStream, isVideoOn, name, isLocal]);
-
-  // Attach video stream to video element
-  // Only use useEffect to avoid race conditions between ref and effect
-  useEffect(() => {
-    const videoElement = videoRef.current;
-    if (!videoElement || !videoStream || !isVideoOn) return;
-
-    // Only set srcObject if it's different to avoid "interrupted by new load" error
-    if (videoElement.srcObject !== videoStream) {
-      console.log(`🎬 ParticipantTile [${name}]: Setting srcObject on video element`);
-      videoElement.srcObject = videoStream;
-    }
-
-    // Only call play if video is paused
-    if (videoElement.paused) {
-      videoElement.play().catch((err) => {
-        // Ignore AbortError - it's usually harmless and means another play was triggered
-        if (err.name !== 'AbortError') {
-          console.warn(`🎬 ParticipantTile [${name}]: Video play failed:`, err);
-        }
-      });
-    }
-  }, [videoStream, isVideoOn, name]);
-
-  const showVideo = videoStream && isVideoOn;
-
-  // Debug: log showVideo decision
-  useEffect(() => {
-    console.log(`🎬 ParticipantTile [${name}]: showVideo=${showVideo}`);
-  }, [showVideo, name]);
-
   return (
     <div
       className={`
@@ -98,46 +55,35 @@ export default function ParticipantTile({
         ${isSpeaking ? "border-green-500 shadow-lg shadow-green-500/20" : "border-slate-700/50"}
       `}
     >
-      {/* Video or Avatar content */}
-      <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px] relative">
-        {/* Always render video element to ensure ref is available */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        />
+      {/* Main content */}
+      <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px]">
+        {/* Avatar circle */}
+        <div
+          className={`
+            w-24 h-24 rounded-full flex items-center justify-center 
+            text-3xl font-bold text-white mb-4
+            transition-all duration-300
+            ${isLocal
+              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
+              : "bg-gradient-to-br from-purple-500 to-pink-600"
+            }
+            ${isSpeaking ? "ring-4 ring-green-500/50 scale-105" : ""}
+          `}
+        >
+          {initials}
+        </div>
 
-        {/* Avatar fallback - shown when video is off */}
-        {!showVideo && (
-          <>
-            <div
-              className={`
-                w-24 h-24 rounded-full flex items-center justify-center 
-                text-3xl font-bold text-white mb-4
-                transition-all duration-300
-                ${isLocal
-                  ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-                  : "bg-gradient-to-br from-purple-500 to-pink-600"
-                }
-                ${isSpeaking ? "ring-4 ring-green-500/50 scale-105" : ""}
-              `}
-            >
-              {initials}
-            </div>
+        {/* Name */}
+        <h3 className="text-white text-xl font-semibold mb-1">
+          {name}
+          {isLocal && <span className="text-blue-400 text-sm ml-2">(You)</span>}
+        </h3>
 
-            <h3 className="text-white text-xl font-semibold mb-1">
-              {name}
-              {isLocal && <span className="text-blue-400 text-sm ml-2">(You)</span>}
-            </h3>
-
-            <div className="flex items-center gap-2 text-slate-300">
-              <span className="text-lg">{langFlag}</span>
-              <span className="text-sm">{langDisplay}</span>
-            </div>
-          </>
-        )}
+        {/* Language */}
+        <div className="flex items-center gap-2 text-slate-300">
+          <span className="text-lg">{langFlag}</span>
+          <span className="text-sm">{langDisplay}</span>
+        </div>
       </div>
 
       {/* Bottom status bar */}

@@ -1,5 +1,5 @@
 // src/hooks/useWebSocket.ts
-// WebSocket + WebRTC Audio/Video hook for live translation
+// WebSocket + WebRTC Audio hook for live translation
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { BASE_URL } from "@/lib/utils";
@@ -35,13 +35,8 @@ export function useWebSocket({
     const [status, setStatus] = useState<string>("Disconnected");
     const [isConnected, setIsConnected] = useState(false);
     const [isAudioOn, setIsAudioOn] = useState(true);
-    const [isVideoOn, setIsVideoOn] = useState(true);
     const [localLevel, setLocalLevel] = useState(0);
     const [partnerLevel, setPartnerLevel] = useState(0);
-
-    // Video streams
-    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
 
     // Transcripts
     const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
@@ -62,56 +57,6 @@ export function useWebSocket({
     const isPlayingRef = useRef(false);
     const isAudioOnRef = useRef(true); // Track mute state for audio processor
     const partnerLevelTimeoutRef = useRef<number | null>(null);
-
-    // WebRTC for peer-to-peer video
-    const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-    const isVideoOnRef = useRef(true);
-    const makingOfferRef = useRef(false);
-    const ignoreOfferRef = useRef(false);
-    const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
-    const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
-
-    // WebRTC ICE servers (STUN + TURN for better connectivity)
-    // Multiple TURN server options for reliability across different networks
-    const rtcConfig: RTCConfiguration = {
-        iceServers: [
-            // Google STUN servers (needed for ICE candidate gathering)
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            // Free TURN servers - multiple fallbacks
-            // freestun.net (confirmed working May 2024)
-            {
-                urls: ["turn:freestun.net:3478", "turns:freestun.net:5349"],
-                username: "free",
-                credential: "free"
-            },
-            // OpenRelay (metered.ca) - multiple transport options
-            {
-                urls: [
-                    "turn:openrelay.metered.ca:80",
-                    "turn:openrelay.metered.ca:443",
-                    "turn:openrelay.metered.ca:443?transport=tcp",
-                    "turns:openrelay.metered.ca:443"
-                ],
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            },
-            // Relay metered servers (different subdomain)
-            {
-                urls: [
-                    "turn:relay.metered.ca:80",
-                    "turn:relay.metered.ca:443",
-                    "turn:relay.metered.ca:443?transport=tcp"
-                ],
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            }
-        ],
-        iceCandidatePoolSize: 10,
-        // Use "all" to allow both STUN and TURN candidates
-        // STUN works for direct connections, TURN needed for symmetric NAT
-        iceTransportPolicy: "all"
-    };
 
     // Sync isAudioOnRef with isAudioOn state
     useEffect(() => {
@@ -164,112 +109,9 @@ export function useWebSocket({
         }
     }, []);
 
-    // Create video offer
-    const createVideoOffer = useCallback(async () => {
-        const pc = peerConnectionRef.current;
-        const ws = wsRef.current;
-        if (!pc || !ws || ws.readyState !== WebSocket.OPEN) {
-            console.log("📹 Cannot create offer - PC or WS not ready");
-            return;
-        }
-
-        try {
-            makingOfferRef.current = true;
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            ws.send(JSON.stringify({ event: "video_offer", sdp: pc.localDescription }));
-            console.log("📹 Video offer sent");
-        } catch (e) {
-            console.error("Error creating offer:", e);
-        } finally {
-            makingOfferRef.current = false;
-        }
-    }, []);
-
-    // Handle incoming video offer
-    const handleVideoOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
-        const pc = peerConnectionRef.current;
-        const ws = wsRef.current;
-
-        // If peer connection isn't ready yet, queue the offer
-        if (!pc) {
-            console.log("📹 Queuing video offer (peer connection not ready)");
-            pendingOfferRef.current = sdp;
-            return;
-        }
-
-        if (!ws) return;
-
-        try {
-            // Check for glare (both sides trying to create offer at same time)
-            const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
-
-            // Receiver is always "polite" - they will roll back their offer if collision happens
-            const isPolite = userType === "receiver";
-            ignoreOfferRef.current = !isPolite && offerCollision;
-
-            if (ignoreOfferRef.current) {
-                console.log("📹 Ignoring offer (glare detected, we are impolite)");
-                return;
-            }
-
-            // If we have a collision and we're polite, rollback
-            if (offerCollision && isPolite) {
-                await Promise.all([
-                    pc.setLocalDescription({ type: "rollback" }),
-                    pc.setRemoteDescription(new RTCSessionDescription(sdp))
-                ]);
-            } else {
-                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-            }
-
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
-            console.log("📹 Video answer sent");
-
-            // Process any queued ICE candidates
-            while (pendingIceCandidatesRef.current.length > 0) {
-                const candidate = pendingIceCandidatesRef.current.shift()!;
-                try {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    console.log("📹 Added queued ICE candidate");
-                } catch (e) {
-                    console.error("Error adding queued ICE candidate:", e);
-                }
-            }
-        } catch (e) {
-            console.error("Error handling offer:", e);
-        }
-    }, [userType]);
-
-    // Handle incoming video answer
-    const handleVideoAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
-        const pc = peerConnectionRef.current;
-        if (!pc) return;
-
-        try {
-            await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-            console.log("📹 Video connection established");
-
-            // Process any queued ICE candidates
-            while (pendingIceCandidatesRef.current.length > 0) {
-                const candidate = pendingIceCandidatesRef.current.shift()!;
-                try {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    console.log("📹 Added queued ICE candidate");
-                } catch (e) {
-                    console.error("Error adding queued ICE candidate:", e);
-                }
-            }
-        } catch (e) {
-            console.error("Error handling answer:", e);
-        }
-    }, []);
-
     // Handle incoming messages
     const handleMessage = useCallback(
-        async (event: MessageEvent) => {
+        (event: MessageEvent) => {
             try {
                 const data = JSON.parse(event.data);
 
@@ -277,28 +119,11 @@ export function useWebSocket({
                     case "user_joined":
                         console.log("👤 Partner joined:", data.name);
                         onPartnerJoined?.(data.name, data.language);
-                        // Only CALLER creates video offer (receiver waits for offer)
-                        // This avoids glare (both sides creating offers at same time)
-                        if (userType === "caller" && peerConnectionRef.current) {
-                            console.log("📹 I am caller - creating video offer");
-                            // Small delay to ensure receiver's peer connection is ready
-                            setTimeout(() => {
-                                createVideoOffer();
-                            }, 500);
-                        } else {
-                            console.log("📹 I am receiver - waiting for offer from caller");
-                        }
                         break;
 
                     case "user_left":
                         console.log("👤 Partner left");
                         onPartnerLeft?.();
-                        // Close peer connection when partner leaves
-                        if (peerConnectionRef.current) {
-                            peerConnectionRef.current.close();
-                            peerConnectionRef.current = null;
-                        }
-                        setRemoteStream(null);
                         break;
 
                     case "transcript_interim":
@@ -327,44 +152,13 @@ export function useWebSocket({
                         if (partnerLevelTimeoutRef.current) clearTimeout(partnerLevelTimeoutRef.current);
                         partnerLevelTimeoutRef.current = window.setTimeout(() => setPartnerLevel(0), 2000);
                         break;
-
-                    // WebRTC Video Signaling
-                    case "video_offer":
-                        console.log("📹 Received video offer");
-                        await handleVideoOffer(data.sdp);
-                        break;
-
-                    case "video_answer":
-                        console.log("📹 Received video answer");
-                        await handleVideoAnswer(data.sdp);
-                        break;
-
-                    case "ice_candidate":
-                        if (data.candidate && peerConnectionRef.current) {
-                            const pc = peerConnectionRef.current;
-                            // Queue ICE candidates if remote description not set yet
-                            if (!pc.remoteDescription) {
-                                console.log("📹 Queuing ICE candidate (no remote description yet)");
-                                pendingIceCandidatesRef.current.push(data.candidate);
-                            } else {
-                                try {
-                                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-                                    console.log("📹 Added ICE candidate");
-                                } catch (e) {
-                                    console.error("Error adding ICE candidate:", e);
-                                }
-                            }
-                        }
-                        break;
                 }
             } catch (e) {
                 console.error("Error parsing message:", e);
             }
         },
-        [onPartnerJoined, onPartnerLeft, processAudioQueue, userType, createVideoOffer, handleVideoOffer, handleVideoAnswer]
+        [onPartnerJoined, onPartnerLeft, processAudioQueue]
     );
-
-    // (WebRTC video callbacks moved above handleMessage)
 
     // Start audio capture
     const startAudioCapture = useCallback(async () => {
@@ -376,166 +170,13 @@ export function useWebSocket({
                     sampleRate: 48000,
                     channelCount: 1,
                 },
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: "user"
-                }
             });
 
             mediaStreamRef.current = stream;
-            setLocalStream(stream); // Set local stream for video display
-
-            // Setup WebRTC peer connection for video
-            const pc = new RTCPeerConnection(rtcConfig);
-            peerConnectionRef.current = pc;
-
-            // Add video track to peer connection (for sending to partner)
-            stream.getTracks().forEach(track => {
-                pc.addTrack(track, stream);
-            });
-
-            // Handle incoming video tracks from partner
-            pc.ontrack = (event) => {
-                console.log("📹 Received remote track:", event.track.kind);
-                console.log("📹 Track enabled:", event.track.enabled);
-                console.log("📹 Track readyState:", event.track.readyState);
-                console.log("📹 Streams count:", event.streams?.length);
-
-                // Always create a new MediaStream to ensure React detects the change
-                // This is critical for re-rendering the video element
-                if (event.streams && event.streams[0]) {
-                    console.log("📹 Setting remote stream from event.streams[0]");
-                    // Clone the stream to force React state update
-                    const stream = event.streams[0];
-                    setRemoteStream(stream);
-
-                    // Also listen for track end to clean up
-                    event.track.onended = () => {
-                        console.log("📹 Remote track ended:", event.track.kind);
-                    };
-                } else {
-                    // Fallback: create a new MediaStream with the track
-                    console.log("📹 No streams in event, creating new MediaStream");
-                    setRemoteStream((prev) => {
-                        // Create new stream with all existing tracks plus new one
-                        const allTracks = prev ? [...prev.getTracks(), event.track] : [event.track];
-                        const newStream = new MediaStream(allTracks);
-                        console.log("📹 Created new stream with", allTracks.length, "tracks");
-                        return newStream;
-                    });
-                }
-            };
-
-            // Handle ICE candidates - log type for debugging
-            pc.onicecandidate = (event) => {
-                if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-                    // Log candidate type for debugging (host/srflx/relay)
-                    const candidateType = event.candidate.type || 'unknown';
-                    console.log(`📹 Generated ICE candidate: type=${candidateType}, protocol=${event.candidate.protocol}`);
-                    wsRef.current.send(JSON.stringify({
-                        event: "ice_candidate",
-                        candidate: event.candidate
-                    }));
-                } else if (event.candidate === null) {
-                    console.log("📹 ICE gathering complete");
-                }
-            };
-
-            // Handle ICE connection state changes
-            pc.oniceconnectionstatechange = () => {
-                console.log("📹 ICE connection state:", pc.iceConnectionState);
-
-                // Handle ICE disconnection - attempt to restart
-                if (pc.iceConnectionState === "disconnected") {
-                    console.log("📹 ICE disconnected, will attempt restart if it doesn't reconnect...");
-                    // Give it a moment to reconnect naturally, then restart if still disconnected
-                    setTimeout(() => {
-                        if (peerConnectionRef.current?.iceConnectionState === "disconnected" ||
-                            peerConnectionRef.current?.iceConnectionState === "failed") {
-                            console.log("📹 ICE still disconnected, attempting restart...");
-                            peerConnectionRef.current?.restartIce();
-                            // Trigger renegotiation - caller should create new offer
-                            if (userType === "caller" && wsRef.current?.readyState === WebSocket.OPEN) {
-                                createVideoOffer();
-                            }
-                        }
-                    }, 2000);
-                }
-
-                // Handle ICE failure - immediately restart
-                if (pc.iceConnectionState === "failed") {
-                    console.log("📹 ICE connection failed, attempting immediate restart...");
-                    pc.restartIce();
-                    // Trigger renegotiation
-                    if (userType === "caller" && wsRef.current?.readyState === WebSocket.OPEN) {
-                        setTimeout(() => createVideoOffer(), 500);
-                    }
-                }
-
-                if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-                    console.log("📹 ✅ Peer connection established successfully!");
-                }
-            };
-
-            // Handle connection state changes
-            pc.onconnectionstatechange = () => {
-                console.log("📹 Connection state:", pc.connectionState);
-                if (pc.connectionState === "connected") {
-                    console.log("📹 ✅ WebRTC fully connected!");
-                }
-            };
-
-            // Handle ICE gathering state
-            pc.onicegatheringstatechange = () => {
-                console.log("📹 ICE gathering state:", pc.iceGatheringState);
-            };
-
-            // Handle negotiation needed - log only, we manually trigger offers when partner joins
-            pc.onnegotiationneeded = () => {
-                console.log("📹 Negotiation needed (will create offer when partner joins)");
-            };
-
-            // Process any pending video offer that was received before peer connection was ready
-            if (pendingOfferRef.current) {
-                console.log("📹 Processing pending video offer");
-                const pendingOffer = pendingOfferRef.current;
-                pendingOfferRef.current = null;
-
-                // Process the pending offer
-                (async () => {
-                    try {
-                        await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        if (wsRef.current?.readyState === WebSocket.OPEN) {
-                            wsRef.current.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
-                            console.log("📹 Video answer sent (from pending offer)");
-                        }
-
-                        // Process any ICE candidates that were queued while waiting for peer connection
-                        console.log("📹 Processing", pendingIceCandidatesRef.current.length, "queued ICE candidates");
-                        while (pendingIceCandidatesRef.current.length > 0) {
-                            const candidate = pendingIceCandidatesRef.current.shift()!;
-                            try {
-                                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                                console.log("📹 Added queued ICE candidate (from pending offer processing)");
-                            } catch (e) {
-                                console.error("Error adding queued ICE candidate:", e);
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Error processing pending offer:", e);
-                    }
-                })();
-            }
-
             const audioContext = new AudioContext({ sampleRate: 48000 });
             audioContextRef.current = audioContext;
 
-            // Create audio-only stream for processing (we only want audio for WebSocket)
-            const audioStream = new MediaStream(stream.getAudioTracks());
-            const source = audioContext.createMediaStreamSource(audioStream);
+            const source = audioContext.createMediaStreamSource(stream);
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
             analyserRef.current = analyser;
@@ -687,21 +328,6 @@ export function useWebSocket({
         }
         analyserRef.current = null;
 
-        // Close peer connection
-        if (peerConnectionRef.current) {
-            peerConnectionRef.current.close();
-            peerConnectionRef.current = null;
-        }
-
-        // Clear pending WebRTC state
-        pendingOfferRef.current = null;
-        pendingIceCandidatesRef.current = [];
-        makingOfferRef.current = false;
-        ignoreOfferRef.current = false;
-
-        setLocalStream(null);
-        setRemoteStream(null);
-
         // Close WebSocket
         if (wsRef.current) {
             if (wsRef.current.readyState === WebSocket.OPEN) {
@@ -739,24 +365,6 @@ export function useWebSocket({
         });
     }, []);
 
-    // Toggle video
-    const toggleVideo = useCallback(() => {
-        setIsVideoOn((prev) => {
-            const newValue = !prev;
-            isVideoOnRef.current = newValue;
-
-            // Enable/disable video tracks
-            if (mediaStreamRef.current) {
-                mediaStreamRef.current.getVideoTracks().forEach(track => {
-                    track.enabled = newValue;
-                });
-            }
-
-            console.log(`📹 Video toggled: ${newValue ? 'ON' : 'OFF'}`);
-            return newValue;
-        });
-    }, []);
-
     // Cleanup on unmount
     useEffect(() => {
         return () => {
@@ -769,19 +377,15 @@ export function useWebSocket({
         status,
         isConnected,
         isAudioOn,
-        isVideoOn,
         localLevel,
         partnerLevel,
         transcripts,
         interimText,
-        localStream,
-        remoteStream,
 
         // Actions
         connect,
         disconnect,
         toggleMute,
-        toggleVideo,
         setIsAudioOn,
     };
 }
