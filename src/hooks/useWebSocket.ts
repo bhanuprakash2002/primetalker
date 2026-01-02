@@ -71,23 +71,38 @@ export function useWebSocket({
     const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
     const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
-    // WebRTC ICE servers (STUN + free TURN for better connectivity)
+    // WebRTC ICE servers (STUN + TURN for better connectivity)
+    // Using multiple STUN servers for reliability
     const rtcConfig: RTCConfiguration = {
         iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
-            // Free TURN servers for NAT traversal
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+            // Free TURN servers for NAT traversal (Metered)
             {
-                urls: "turn:openrelay.metered.ca:80",
-                username: "openrelayproject",
-                credential: "openrelayproject"
+                urls: "turn:a.relay.metered.ca:80",
+                username: "e8dd65def7205b163ab5bce8",
+                credential: "uMW/7yGYItXwxPpo"
             },
             {
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
+                urls: "turn:a.relay.metered.ca:80?transport=tcp",
+                username: "e8dd65def7205b163ab5bce8",
+                credential: "uMW/7yGYItXwxPpo"
+            },
+            {
+                urls: "turn:a.relay.metered.ca:443",
+                username: "e8dd65def7205b163ab5bce8",
+                credential: "uMW/7yGYItXwxPpo"
+            },
+            {
+                urls: "turn:a.relay.metered.ca:443?transport=tcp",
+                username: "e8dd65def7205b163ab5bce8",
+                credential: "uMW/7yGYItXwxPpo"
             }
-        ]
+        ],
+        iceCandidatePoolSize: 10
     };
 
     // Sync isAudioOnRef with isAudioOn state
@@ -379,19 +394,26 @@ export function useWebSocket({
                 console.log("📹 Track readyState:", event.track.readyState);
                 console.log("📹 Streams count:", event.streams?.length);
 
+                // Always create a new MediaStream to ensure React detects the change
+                // This is critical for re-rendering the video element
                 if (event.streams && event.streams[0]) {
                     console.log("📹 Setting remote stream from event.streams[0]");
-                    setRemoteStream(event.streams[0]);
+                    // Clone the stream to force React state update
+                    const stream = event.streams[0];
+                    setRemoteStream(stream);
+
+                    // Also listen for track end to clean up
+                    event.track.onended = () => {
+                        console.log("📹 Remote track ended:", event.track.kind);
+                    };
                 } else {
                     // Fallback: create a new MediaStream with the track
                     console.log("📹 No streams in event, creating new MediaStream");
-                    const newStream = new MediaStream([event.track]);
                     setRemoteStream((prev) => {
-                        if (prev) {
-                            // Add track to existing stream
-                            prev.addTrack(event.track);
-                            return prev;
-                        }
+                        // Create new stream with all existing tracks plus new one
+                        const allTracks = prev ? [...prev.getTracks(), event.track] : [event.track];
+                        const newStream = new MediaStream(allTracks);
+                        console.log("📹 Created new stream with", allTracks.length, "tracks");
                         return newStream;
                     });
                 }
@@ -410,11 +432,29 @@ export function useWebSocket({
             // Handle ICE connection state changes
             pc.oniceconnectionstatechange = () => {
                 console.log("📹 ICE connection state:", pc.iceConnectionState);
+
+                // Handle ICE failure - may need to restart
+                if (pc.iceConnectionState === "failed") {
+                    console.log("📹 ICE connection failed, attempting restart...");
+                    pc.restartIce();
+                }
+
+                if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+                    console.log("📹 ✅ Peer connection established successfully!");
+                }
             };
 
             // Handle connection state changes
             pc.onconnectionstatechange = () => {
                 console.log("📹 Connection state:", pc.connectionState);
+                if (pc.connectionState === "connected") {
+                    console.log("📹 ✅ WebRTC fully connected!");
+                }
+            };
+
+            // Handle ICE gathering state
+            pc.onicegatheringstatechange = () => {
+                console.log("📹 ICE gathering state:", pc.iceGatheringState);
             };
 
             // Handle negotiation needed - log only, we manually trigger offers when partner joins
@@ -437,6 +477,18 @@ export function useWebSocket({
                         if (wsRef.current?.readyState === WebSocket.OPEN) {
                             wsRef.current.send(JSON.stringify({ event: "video_answer", sdp: pc.localDescription }));
                             console.log("📹 Video answer sent (from pending offer)");
+                        }
+
+                        // Process any ICE candidates that were queued while waiting for peer connection
+                        console.log("📹 Processing", pendingIceCandidatesRef.current.length, "queued ICE candidates");
+                        while (pendingIceCandidatesRef.current.length > 0) {
+                            const candidate = pendingIceCandidatesRef.current.shift()!;
+                            try {
+                                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                                console.log("📹 Added queued ICE candidate (from pending offer processing)");
+                            } catch (e) {
+                                console.error("Error adding queued ICE candidate:", e);
+                            }
                         }
                     } catch (e) {
                         console.error("Error processing pending offer:", e);
