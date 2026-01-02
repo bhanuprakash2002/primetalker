@@ -1,5 +1,5 @@
 // src/components/call/ParticipantTile.tsx
-import React, { useRef, useEffect, useCallback } from "react";
+import React, { useRef, useEffect } from "react";
 import MicLevel from "./MicLevel";
 import { Mic, MicOff, Globe, User } from "lucide-react";
 
@@ -59,25 +59,25 @@ export default function ParticipantTile({
     }
   }, [videoStream, isVideoOn, name, isLocal]);
 
-  // Attach video stream to video element using callback ref for immediate assignment
-  const setVideoRef = useCallback((videoElement: HTMLVideoElement | null) => {
-    videoRef.current = videoElement;
-    if (videoElement && videoStream) {
+  // Attach video stream to video element
+  // Only use useEffect to avoid race conditions between ref and effect
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement || !videoStream || !isVideoOn) return;
+
+    // Only set srcObject if it's different to avoid "interrupted by new load" error
+    if (videoElement.srcObject !== videoStream) {
       console.log(`🎬 ParticipantTile [${name}]: Setting srcObject on video element`);
       videoElement.srcObject = videoStream;
-      videoElement.play().catch((err) => {
-        console.warn(`🎬 ParticipantTile [${name}]: Video play failed:`, err);
-      });
     }
-  }, [videoStream, name]);
 
-  // Also re-attach when videoStream changes (for when video element already exists)
-  useEffect(() => {
-    if (videoRef.current && videoStream && isVideoOn) {
-      console.log(`🎬 ParticipantTile [${name}]: Re-attaching srcObject in useEffect`);
-      videoRef.current.srcObject = videoStream;
-      videoRef.current.play().catch((err) => {
-        console.warn(`🎬 ParticipantTile [${name}]: Video play failed:`, err);
+    // Only call play if video is paused
+    if (videoElement.paused) {
+      videoElement.play().catch((err) => {
+        // Ignore AbortError - it's usually harmless and means another play was triggered
+        if (err.name !== 'AbortError') {
+          console.warn(`🎬 ParticipantTile [${name}]: Video play failed:`, err);
+        }
       });
     }
   }, [videoStream, isVideoOn, name]);
@@ -102,7 +102,7 @@ export default function ParticipantTile({
       <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px] relative">
         {showVideo ? (
           <video
-            ref={setVideoRef}
+            ref={videoRef}
             autoPlay
             playsInline
             muted={isLocal}
