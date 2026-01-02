@@ -1,5 +1,5 @@
 // src/components/call/ParticipantTile.tsx
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 import MicLevel from "./MicLevel";
 import { Mic, MicOff, Globe, User } from "lucide-react";
 
@@ -51,20 +51,43 @@ export default function ParticipantTile({
   // Determine if speaking based on audio level
   const isSpeaking = !muted && level > 15;
 
-  // Attach video stream to video element
-  // Re-attach and play when isVideoOn changes to ensure video resumes correctly
+  // Debug: log when videoStream changes
   useEffect(() => {
-    if (videoRef.current && videoStream && isVideoOn) {
-      // Re-assign srcObject to refresh the video element
-      videoRef.current.srcObject = videoStream;
-      // Ensure playback resumes
-      videoRef.current.play().catch((err) => {
-        console.warn("Video play failed:", err);
+    console.log(`🎬 ParticipantTile [${name}]: videoStream=${videoStream ? 'HAS_STREAM' : 'NULL'}, isVideoOn=${isVideoOn}, isLocal=${isLocal}`);
+    if (videoStream) {
+      console.log(`🎬 ParticipantTile [${name}]: tracks=`, videoStream.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
+    }
+  }, [videoStream, isVideoOn, name, isLocal]);
+
+  // Attach video stream to video element using callback ref for immediate assignment
+  const setVideoRef = useCallback((videoElement: HTMLVideoElement | null) => {
+    videoRef.current = videoElement;
+    if (videoElement && videoStream) {
+      console.log(`🎬 ParticipantTile [${name}]: Setting srcObject on video element`);
+      videoElement.srcObject = videoStream;
+      videoElement.play().catch((err) => {
+        console.warn(`🎬 ParticipantTile [${name}]: Video play failed:`, err);
       });
     }
-  }, [videoStream, isVideoOn]);
+  }, [videoStream, name]);
+
+  // Also re-attach when videoStream changes (for when video element already exists)
+  useEffect(() => {
+    if (videoRef.current && videoStream && isVideoOn) {
+      console.log(`🎬 ParticipantTile [${name}]: Re-attaching srcObject in useEffect`);
+      videoRef.current.srcObject = videoStream;
+      videoRef.current.play().catch((err) => {
+        console.warn(`🎬 ParticipantTile [${name}]: Video play failed:`, err);
+      });
+    }
+  }, [videoStream, isVideoOn, name]);
 
   const showVideo = videoStream && isVideoOn;
+
+  // Debug: log showVideo decision
+  useEffect(() => {
+    console.log(`🎬 ParticipantTile [${name}]: showVideo=${showVideo}`);
+  }, [showVideo, name]);
 
   return (
     <div
@@ -79,7 +102,7 @@ export default function ParticipantTile({
       <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px] relative">
         {showVideo ? (
           <video
-            ref={videoRef}
+            ref={setVideoRef}
             autoPlay
             playsInline
             muted={isLocal}
