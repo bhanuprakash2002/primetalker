@@ -75,41 +75,42 @@ export function useWebSocket({
     // Multiple TURN server options for reliability across different networks
     const rtcConfig: RTCConfiguration = {
         iceServers: [
-            // Google STUN servers
+            // Google STUN servers (needed for ICE candidate gathering)
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
             // Free TURN servers - multiple fallbacks
             // freestun.net (confirmed working May 2024)
             {
-                urls: "turn:freestun.net:3478",
+                urls: ["turn:freestun.net:3478", "turns:freestun.net:5349"],
                 username: "free",
                 credential: "free"
             },
+            // OpenRelay (metered.ca) - multiple transport options
             {
-                urls: "turn:freestun.net:5349",
-                username: "free",
-                credential: "free"
-            },
-            // OpenRelay (metered.ca)
-            {
-                urls: "turn:openrelay.metered.ca:80",
+                urls: [
+                    "turn:openrelay.metered.ca:80",
+                    "turn:openrelay.metered.ca:443",
+                    "turn:openrelay.metered.ca:443?transport=tcp",
+                    "turns:openrelay.metered.ca:443"
+                ],
                 username: "openrelayproject",
                 credential: "openrelayproject"
             },
+            // Relay metered servers (different subdomain)
             {
-                urls: "turn:openrelay.metered.ca:443",
-                username: "openrelayproject",
-                credential: "openrelayproject"
-            },
-            {
-                urls: "turn:openrelay.metered.ca:443?transport=tcp",
+                urls: [
+                    "turn:relay.metered.ca:80",
+                    "turn:relay.metered.ca:443",
+                    "turn:relay.metered.ca:443?transport=tcp"
+                ],
                 username: "openrelayproject",
                 credential: "openrelayproject"
             }
         ],
         iceCandidatePoolSize: 10,
-        iceTransportPolicy: "all" // Try both STUN and TURN
+        // Force relay to ensure TURN servers are used (helps with symmetric NAT)
+        // Change to "all" if you want to try STUN first
+        iceTransportPolicy: "relay"
     };
 
     // Sync isAudioOnRef with isAudioOn state
@@ -426,13 +427,18 @@ export function useWebSocket({
                 }
             };
 
-            // Handle ICE candidates
+            // Handle ICE candidates - log type for debugging
             pc.onicecandidate = (event) => {
                 if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+                    // Log candidate type for debugging (host/srflx/relay)
+                    const candidateType = event.candidate.type || 'unknown';
+                    console.log(`📹 Generated ICE candidate: type=${candidateType}, protocol=${event.candidate.protocol}`);
                     wsRef.current.send(JSON.stringify({
                         event: "ice_candidate",
                         candidate: event.candidate
                     }));
+                } else if (event.candidate === null) {
+                    console.log("📹 ICE gathering complete");
                 }
             };
 
