@@ -1,7 +1,8 @@
 // src/components/call/ParticipantTile.tsx
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import MicLevel from "./MicLevel";
-import { Mic, MicOff, Globe, User } from "lucide-react";
+import { Mic, MicOff, Video, VideoOff } from "lucide-react";
+import { LocalVideoTrack, RemoteVideoTrack } from "twilio-video";
 
 // Language display names
 const languageNames: Record<string, string> = {
@@ -29,13 +30,34 @@ export default function ParticipantTile({
   muted = false,
   level = 0,
   language,
+  videoTrack,
+  isVideoOn = true,
 }: {
   name: string;
   isLocal?: boolean;
   muted?: boolean;
   level?: number;
   language?: string;
+  videoTrack?: LocalVideoTrack | RemoteVideoTrack | null;
+  isVideoOn?: boolean;
 }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Attach video track to video element
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement || !videoTrack) return;
+
+    // Attach the track to the video element
+    const attachedElement = videoTrack.attach(videoElement);
+    console.log("📹 Video track attached to element");
+
+    return () => {
+      videoTrack.detach(videoElement);
+      console.log("📹 Video track detached from element");
+    };
+  }, [videoTrack]);
+
   const langCode = language?.split("-")[0] || "en";
   const langDisplay = languageNames[langCode] || language || "Unknown";
   const langFlag = languageFlags[langCode] || "🌐";
@@ -46,6 +68,8 @@ export default function ParticipantTile({
   // Determine if speaking based on audio level
   const isSpeaking = !muted && level > 15;
 
+  const hasVideo = videoTrack && isVideoOn;
+
   return (
     <div
       className={`
@@ -55,36 +79,66 @@ export default function ParticipantTile({
         ${isSpeaking ? "border-green-500 shadow-lg shadow-green-500/20" : "border-slate-700/50"}
       `}
     >
-      {/* Main content */}
-      <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px]">
-        {/* Avatar circle */}
-        <div
-          className={`
-            w-24 h-24 rounded-full flex items-center justify-center 
-            text-3xl font-bold text-white mb-4
-            transition-all duration-300
-            ${isLocal
-              ? "bg-gradient-to-br from-blue-500 to-indigo-600"
-              : "bg-gradient-to-br from-purple-500 to-pink-600"
-            }
-            ${isSpeaking ? "ring-4 ring-green-500/50 scale-105" : ""}
-          `}
-        >
-          {initials}
+      {/* Video element */}
+      {hasVideo ? (
+        <div className="aspect-video relative min-h-[200px]">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={isLocal} // Mute local video to prevent echo
+            className={`w-full h-full object-cover ${isLocal ? "scale-x-[-1]" : ""}`}
+          />
+          {/* Name overlay on video */}
+          <div className="absolute top-3 left-3 flex items-center gap-2">
+            <span className="bg-black/60 px-3 py-1 rounded-full text-white text-sm font-medium">
+              {name} {isLocal && "(You)"}
+            </span>
+            <span className="bg-black/60 px-2 py-1 rounded-full text-sm">
+              {langFlag}
+            </span>
+          </div>
         </div>
+      ) : (
+        /* Avatar fallback when no video */
+        <div className="aspect-video flex flex-col items-center justify-center p-6 min-h-[200px]">
+          {/* Avatar circle */}
+          <div
+            className={`
+              w-24 h-24 rounded-full flex items-center justify-center 
+              text-3xl font-bold text-white mb-4
+              transition-all duration-300
+              ${isLocal
+                ? "bg-gradient-to-br from-blue-500 to-indigo-600"
+                : "bg-gradient-to-br from-purple-500 to-pink-600"
+              }
+              ${isSpeaking ? "ring-4 ring-green-500/50 scale-105" : ""}
+            `}
+          >
+            {initials}
+          </div>
 
-        {/* Name */}
-        <h3 className="text-white text-xl font-semibold mb-1">
-          {name}
-          {isLocal && <span className="text-blue-400 text-sm ml-2">(You)</span>}
-        </h3>
+          {/* Name */}
+          <h3 className="text-white text-xl font-semibold mb-1">
+            {name}
+            {isLocal && <span className="text-blue-400 text-sm ml-2">(You)</span>}
+          </h3>
 
-        {/* Language */}
-        <div className="flex items-center gap-2 text-slate-300">
-          <span className="text-lg">{langFlag}</span>
-          <span className="text-sm">{langDisplay}</span>
+          {/* Language */}
+          <div className="flex items-center gap-2 text-slate-300">
+            <span className="text-lg">{langFlag}</span>
+            <span className="text-sm">{langDisplay}</span>
+          </div>
+
+          {/* Video off indicator */}
+          {!isVideoOn && (
+            <div className="mt-2 flex items-center gap-1 text-slate-400 text-sm">
+              <VideoOff size={14} />
+              <span>Camera Off</span>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Bottom status bar */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
@@ -124,3 +178,4 @@ export default function ParticipantTile({
     </div>
   );
 }
+

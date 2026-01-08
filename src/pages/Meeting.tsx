@@ -1,5 +1,5 @@
 // src/pages/Meeting.tsx
-// WebSocket-based Meeting Page (replaces Twilio)
+// WebSocket-based Meeting Page with Twilio Video
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { joinRoom, BASE_URL } from "@/lib/utils";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useTwilioVideo } from "@/hooks/useTwilioVideo";
 import { useUsername } from "@/hooks/useUsername";
 
 import { Globe, Users } from "lucide-react";
@@ -67,6 +68,21 @@ export default function Meeting() {
     },
   });
 
+  // Twilio Video hook (for video only - audio is handled by WebSocket)
+  const {
+    isConnected: isVideoConnected,
+    isVideoOn,
+    localVideoTrack,
+    remoteVideoTrack,
+    error: videoError,
+    connect: connectVideo,
+    disconnect: disconnectVideo,
+    toggleVideo,
+  } = useTwilioVideo({
+    roomId: roomId || "",
+    identity: myName,
+  });
+
   // Update status from WebSocket
   useEffect(() => {
     setStatus(wsStatus);
@@ -120,7 +136,8 @@ export default function Meeting() {
   const startMeeting = () => {
     setStarted(true);
     fetchRoomInfo();
-    connect();
+    connect(); // Audio/translation WebSocket
+    connectVideo(); // Twilio Video
   };
 
   // End call
@@ -134,7 +151,8 @@ export default function Meeting() {
         }).catch(console.warn);
       }
 
-      disconnect();
+      disconnect(); // Audio WebSocket
+      disconnectVideo(); // Twilio Video
     } catch (e) {
       console.warn("endCall error", e);
     } finally {
@@ -161,8 +179,9 @@ export default function Meeting() {
   useEffect(() => {
     return () => {
       disconnect();
+      disconnectVideo();
     };
-  }, [disconnect]);
+  }, [disconnect, disconnectVideo]);
 
   // Convert transcripts for RightPanel
   const formattedTranscripts = transcripts.map((t) => ({
@@ -174,11 +193,29 @@ export default function Meeting() {
     timestamp: t.timestamp,
   }));
 
-  // Participants
+  // Participants with video tracks
   const participantsToRender = [
-    { id: "you", name: myName, isLocal: true, muted: !isAudioOn, level: localLevel, language: myLanguage },
+    {
+      id: "you",
+      name: myName,
+      isLocal: true,
+      muted: !isAudioOn,
+      level: localLevel,
+      language: myLanguage,
+      videoTrack: localVideoTrack,
+      isVideoOn: isVideoOn,
+    },
     ...(partnerJoined
-      ? [{ id: "partner", name: partnerName, isLocal: false, muted: false, level: partnerLevel, language: partnerLanguage }]
+      ? [{
+        id: "partner",
+        name: partnerName,
+        isLocal: false,
+        muted: false,
+        level: partnerLevel,
+        language: partnerLanguage,
+        videoTrack: remoteVideoTrack,
+        isVideoOn: true, // Remote video is always considered "on" if track exists
+      }]
       : []),
   ];
 
@@ -242,6 +279,8 @@ export default function Meeting() {
                   muted={p.muted}
                   level={p.level}
                   language={p.language || undefined}
+                  videoTrack={p.videoTrack}
+                  isVideoOn={p.isVideoOn}
                 />
               ))
             )}
@@ -297,9 +336,11 @@ export default function Meeting() {
             isAudioOn={isAudioOn}
             isSpeakerOn={isSpeakerOn}
             isChatOpen={sidebarOpen}
+            isVideoOn={isVideoOn}
             onToggleMute={toggleMute}
             onToggleSpeaker={toggleSpeaker}
             onToggleChat={() => setSidebarOpen((s) => !s)}
+            onToggleVideo={toggleVideo}
             onEndCall={endCall}
           />
         </div>
