@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUsername } from "@/hooks/useUsername";
 import { createRoom, joinRoom } from "@/lib/utils";
 import Footer from "@/components/Footer";
+import PremiumBackground from "@/components/PremiumBackground";
 
 const Rooms = () => {
   const navigate = useNavigate();
@@ -182,6 +183,7 @@ const Rooms = () => {
 
   return (
     <div className="min-h-screen bg-gradient-hero flex flex-col">
+      <PremiumBackground />
       {/* Header */}
       <header className="border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">

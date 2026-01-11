@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { countries, getStatesByCountry } from "@/lib/countryStateData";
 import Footer from "@/components/Footer";
+import PremiumBackground from "@/components/PremiumBackground";
 
 // =====================================================
 // VALIDATION FUNCTIONS
@@ -690,6 +691,7 @@ const Auth = () => {
   if (isSignUp && signupStep === 3) {
     return (
       <div className="min-h-screen bg-gradient-hero flex flex-col">
+        <PremiumBackground />
         <main className="flex-1 flex items-center justify-center p-4">
           {renderEmailConfirmation()}
         </main>
@@ -702,6 +704,7 @@ const Auth = () => {
   if (isSignUp && signupStep === 2) {
     return (
       <div className="min-h-screen bg-gradient-hero flex flex-col">
+        <PremiumBackground />
         <main className="flex-1 flex items-center justify-center p-4">
           {renderConfirmationPage()}
         </main>
@@ -712,6 +715,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen bg-gradient-hero flex flex-col">
+      <PremiumBackground />
       <main className="flex-1 flex items-center justify-center p-4">
         <Card className={`w-full shadow-primary ${isSignUp ? 'max-w-lg' : 'max-w-md'}`}>
           <CardHeader className="text-center space-y-4">

@@ -4,6 +4,7 @@ import { Video, Globe, Mic, Shield, Download, User, Pencil, Camera, Settings, Bo
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import Footer from "@/components/Footer";
+import PremiumBackground from "@/components/PremiumBackground";
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ const Landing = () => {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      <PremiumBackground />
 
       {/* NAVIGATION BAR */}
       <nav className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-50">
