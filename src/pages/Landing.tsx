@@ -18,14 +18,16 @@ const Landing = () => {
     });
   }, []);
 
-  // Small avatar icon (opens drawer)
+  // Profile menu with dropdown positioning
   const ProfileMenu = ({ user }: { user: any }) => {
     return (
-      <img
-        src={user.user_metadata?.avatar_url || "/default-avatar.svg"}
-        className="w-10 h-10 rounded-full border cursor-pointer hover:scale-105 transition"
-        onClick={() => setDrawerOpen(true)}
-      />
+      <div className="relative">
+        <img
+          src={user.user_metadata?.avatar_url || "/default-avatar.svg"}
+          className="w-10 h-10 rounded-full border cursor-pointer hover:scale-105 transition"
+          onClick={() => setDrawerOpen(!drawerOpen)}
+        />
+      </div>
     );
   };
 
@@ -287,19 +289,20 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
       {/* Overlay */}
       <div
         className={`
-          fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 z-40
+          fixed inset-0 bg-black/40 transition-opacity duration-300 z-40
           ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
         `}
         onClick={onClose}
       />
 
-      {/* Drawer */}
+      {/* Dropdown Panel - positioned at top right */}
       <div
         className={`
-          fixed top-0 right-0 h-full w-[340px] bg-white dark:bg-slate-900 
-          shadow-2xl z-50 rounded-l-3xl border-l border-gray-100 dark:border-slate-800
-          transform transition-transform duration-300 ease-out flex flex-col
-          ${open ? "translate-x-0" : "translate-x-full"}
+          fixed top-16 right-4 w-[340px] max-h-[calc(100vh-80px)] overflow-y-auto
+          bg-white dark:bg-slate-900 
+          shadow-2xl z-50 rounded-2xl border border-gray-200 dark:border-slate-700
+          transform transition-all duration-300 ease-out flex flex-col
+          ${open ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-2 pointer-events-none"}
         `}
       >
         {/* Header */}
