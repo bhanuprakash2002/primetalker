@@ -18,16 +18,14 @@ const Landing = () => {
     });
   }, []);
 
-  // Profile menu with dropdown positioning
+  // Profile menu - just the avatar button
   const ProfileMenu = ({ user }: { user: any }) => {
     return (
-      <div className="relative">
-        <img
-          src={user.user_metadata?.avatar_url || "/default-avatar.svg"}
-          className="w-10 h-10 rounded-full border cursor-pointer hover:scale-105 transition"
-          onClick={() => setDrawerOpen(!drawerOpen)}
-        />
-      </div>
+      <img
+        src={user.user_metadata?.avatar_url || "/default-avatar.svg"}
+        className="w-10 h-10 rounded-full border cursor-pointer hover:scale-105 transition"
+        onClick={() => setDrawerOpen(!drawerOpen)}
+      />
     );
   };
 
@@ -161,7 +159,7 @@ const Landing = () => {
       {/* FOOTER */}
       <Footer />
 
-      {/* PROFILE DRAWER */}
+      {/* PROFILE DRAWER - rendered at page level for proper state management */}
       {user && (
         <ProfileDrawer
           user={user}
@@ -288,21 +286,32 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
     <>
       {/* Overlay */}
       <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9998
+        }}
         className={`
-          fixed inset-0 bg-black/40 transition-opacity duration-300 z-40
-          ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+          bg-black/40 transition-opacity duration-200
+          ${open ? "opacity-100" : "opacity-0 pointer-events-none"}
         `}
         onClick={onClose}
       />
 
-      {/* Dropdown Panel - positioned at top right */}
+      {/* Profile Panel - appears at top right below navbar */}
       <div
+        style={{
+          position: 'fixed',
+          top: '56px',
+          right: '16px',
+          zIndex: 9999
+        }}
         className={`
-          fixed top-16 right-4 w-[340px] max-h-[calc(100vh-80px)] overflow-y-auto
+          w-[320px] max-h-[80vh] overflow-y-auto
           bg-white dark:bg-slate-900 
-          shadow-2xl z-50 rounded-2xl border border-gray-200 dark:border-slate-700
-          transform transition-all duration-300 ease-out flex flex-col
-          ${open ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-2 pointer-events-none"}
+          shadow-2xl rounded-2xl border border-gray-200 dark:border-slate-700
+          transition-all duration-200 ease-out flex flex-col origin-top-right
+          ${open ? "opacity-100 scale-100" : "opacity-0 scale-90 pointer-events-none"}
         `}
       >
         {/* Header */}
