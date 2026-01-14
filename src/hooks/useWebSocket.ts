@@ -127,6 +127,7 @@ export function useWebSocket({
                         break;
 
                     case "transcript_interim":
+                        console.log("⏳ INTERIM TEXT RECEIVED:", data.text);
                         setInterimText(data.text || "");
                         break;
 

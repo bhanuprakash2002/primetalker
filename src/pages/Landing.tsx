@@ -255,6 +255,7 @@ const ProfileDrawer = ({ user, open, onClose }: any) => {
       const { error } = await supabase.auth.updateUser({
         data: {
           full_name: name,
+          username: name,
           avatar_url: uploadedAvatarUrl,
         },
       });
