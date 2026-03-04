@@ -80,7 +80,7 @@ export default function Meeting() {
     toggleVideo,
   } = useTwilioVideo({
     roomId: roomId || "",
-    identity: myName,
+    identity: `${myName}-${role}`,
   });
 
   // Update status from WebSocket
